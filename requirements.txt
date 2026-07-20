@@ -1,4 +1,9 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-dotenv
+pydantic-settings
 requests
+google-genai
+httpx
+pytest
+pytest-asyncio
