@@ -20,7 +20,7 @@ app/
 │   └── webhook.py          # POST /webhook/chatwoot 엔드포인트
 ├── services/
 │   ├── chatwoot_client.py  # Chatwoot API 호출 (메시지 전송)
-│   ├── llm_client.py       # LLM 연동 인터페이스 (팀원 담당)
+│   ├── llm_client.py       # LLM 연동 인터페이스
 │   └── verify.py           # 웹훅 HMAC-SHA256 서명 검증
 └── models/
     └── schemas.py          # Chatwoot 웹훅 페이로드 Pydantic 모델
@@ -45,12 +45,12 @@ cp .env.example .env
 
 ## Environment Variables
 
-| 변수명 | 필수 | 설명 |
-|---|---|---|
-| `CHATWOOT_API_URL` | ✅ | Chatwoot 서버 주소 (예: `http://localhost:3000`) |
-| `CHATWOOT_API_TOKEN` | ✅ | Chatwoot Profile Settings의 Access Token |
-| `CHATWOOT_WEBHOOK_SECRET` | - | Agent Bot Webhook Secret (비우면 검증 생략) |
-| `GEMINI_API_KEY` | - | Gemini API 키 ([AI Studio](https://aistudio.google.com/app/apikey)) |
+| 변수명                    | 필수 | 설명                                                                |
+| ------------------------- | ---- | ------------------------------------------------------------------- |
+| `CHATWOOT_API_URL`        | ✅   | Chatwoot 서버 주소 (예: `http://localhost:3000`)                    |
+| `CHATWOOT_API_TOKEN`      | ✅   | Chatwoot Profile Settings의 Access Token                            |
+| `CHATWOOT_WEBHOOK_SECRET` | -    | Agent Bot Webhook Secret (비우면 검증 생략)                         |
+| `GEMINI_API_KEY`          | -    | Gemini API 키 ([AI Studio](https://aistudio.google.com/app/apikey)) |
 
 ## Run
 
@@ -68,7 +68,9 @@ uvicorn app.main:app --reload --port 8080
 2. Webhook URL: `https://<your-domain>/webhook/chatwoot`
    - 로컬 개발 시: [localtunnel](https://localtunnel.github.io/) 또는 ngrok으로 터널링
    ```bash
-   npx localtunnel --port 8080
+   # --subdomain 으로 고정 URL 사용 (매번 바뀌지 않음)
+   npx localtunnel --port 8080 --subdomain chatdesk-ai-nanoiti
+   # → https://chatdesk-ai-nanoiti.loca.lt/webhook/chatwoot
    ```
 3. 생성된 **Webhook Secret**을 `.env`의 `CHATWOOT_WEBHOOK_SECRET`에 입력
 4. **Settings → Inboxes → (Inbox 선택) → Configuration → Agent Bot** 에서 봇 연결
@@ -84,7 +86,7 @@ uvicorn app.main:app --reload --port 8080
   → Chatwoot API 응답 전송
 ```
 
-## LLM Interface (팀원 담당)
+## LLM Interface
 
 `app/services/llm_client.py`에서 아래 함수 시그니처를 유지하며 Gemini API로 구현:
 
