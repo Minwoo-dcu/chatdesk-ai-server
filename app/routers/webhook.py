@@ -33,16 +33,17 @@ async def chatwoot_webhook(
 
     logger.info("웹훅 수신 | event=%s", payload.event)
 
+
     # ── 2. message_created 이벤트만 처리 ─────────────────────────────────────
     if payload.event != "message_created":
         logger.debug("이벤트 무시: %s", payload.event)
         return {"status": "ignored", "reason": "event not handled"}
 
-    message = payload.message
-    if message is None or message.message_type != 0:  # 0 = incoming (고객 메시지)
+    # Agent Bot 웹훅은 message_type을 최상위에 문자열로 전달합니다 ("incoming" | "outgoing")
+    if payload.message_type != "incoming":
         return {"status": "ignored", "reason": "not an incoming message"}
 
-    user_content = (message.content or "").strip()
+    user_content = (payload.content or "").strip()
     if not user_content:
         return {"status": "ignored", "reason": "empty content"}
 
@@ -64,7 +65,7 @@ async def chatwoot_webhook(
         "처리 시작 | account=%d conv=%d sender=%s msg=%s",
         account_id,
         conversation_id,
-        message.sender.name if message.sender else "unknown",
+        payload.sender.name if payload.sender else "unknown",
         user_content[:80],
     )
 
