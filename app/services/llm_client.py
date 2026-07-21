@@ -9,17 +9,27 @@ webhook.py는 아래 함수만 호출합니다:
         history: list[dict],
     ) -> str:
 
-Gemini API(gemini-2.0-flash)로 구현됨.
+Groq API 기반 LLM 응답 생성
 """
 
 import os
 
 from dotenv import load_dotenv
-from google import genai
+from groq import Groq
 
 load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+_client = None
+
+
+def get_client():
+    """
+    Groq Client 생성 (최초 호출 시 1회만 생성, 이후 재사용)
+    """
+    global _client
+    if _client is None:
+        _client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    return _client
 
 
 async def get_ai_response(
@@ -27,9 +37,20 @@ async def get_ai_response(
     conversation_id: int,
     history: list[dict],
 ) -> str:
-    # TODO: history를 활용한 멀티턴 컨텍스트 반영 (4~5주차)
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=message,
+    """
+    사용자 메시지를 받아 LLM 응답 생성
+    """
+
+    client = get_client()
+
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {
+                "role": "user",
+                "content": message,
+            }
+        ],
     )
-    return response.text
+
+    return response.choices[0].message.content

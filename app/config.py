@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     chatwoot_webhook_secret: str = ""  # 빈 값이면 서명 검증 생략
 
     # LLM (팀원 담당 — llm_client.py에서 사용)
-    gemini_api_key: str = ""
+    groq_api_key: str = ""
 
     class Config:
         env_file = ".env"

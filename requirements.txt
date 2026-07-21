@@ -3,7 +3,7 @@ uvicorn[standard]
 python-dotenv
 pydantic-settings
 requests
-google-genai
+groq
 httpx
 pytest
 pytest-asyncio
