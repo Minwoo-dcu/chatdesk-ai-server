@@ -1,7 +1,5 @@
 """
-llm_client.py — AI 응답 생성 모듈 (팀원 담당)
-
-## 인터페이스 계약
+llm_client.py — AI 응답 생성 모듈
 
 webhook.py는 아래 함수만 호출합니다:
 
@@ -11,19 +9,17 @@ webhook.py는 아래 함수만 호출합니다:
         history: list[dict],
     ) -> str:
 
-### 파라미터
-- message (str): 고객이 보낸 메시지 원문
-- conversation_id (int): Chatwoot 대화 ID (문맥 추적용)
-- history (list[dict]): 최근 대화 이력
-    예시: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
-
-### 반환값
-- str: 봇이 고객에게 전송할 응답 텍스트
-
-## 현재 상태: MOCK (에코 응답)
-아래 구현은 임시 목업입니다. 실제 Gemini API 연동으로 교체해주세요.
-config.py의 `gemini_api_key` (환경변수 GEMINI_API_KEY) 를 사용하면 됩니다.
+Gemini API(gemini-2.0-flash)로 구현됨.
 """
+
+import os
+
+from dotenv import load_dotenv
+from google import genai
+
+load_dotenv()
+
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
 async def get_ai_response(
@@ -31,5 +27,9 @@ async def get_ai_response(
     conversation_id: int,
     history: list[dict],
 ) -> str:
-    # TODO: Gemini API 연동으로 교체 (팀원 담당)
-    return f"[ECHO] {message}"
+    # TODO: history를 활용한 멀티턴 컨텍스트 반영 (4~5주차)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=message,
+    )
+    return response.text
