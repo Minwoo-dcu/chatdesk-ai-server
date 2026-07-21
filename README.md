@@ -52,6 +52,13 @@ cp .env.example .env
 | `CHATWOOT_WEBHOOK_SECRET` | -    | Agent Bot Webhook Secret (비우면 검증 생략)                         |
 | `GEMINI_API_KEY`          | -    | Gemini API 키 ([AI Studio](https://aistudio.google.com/app/apikey)) |
 
+### 웹훅 서명 검증 방식
+
+Chatwoot는 `X-Chatwoot-Signature`(`sha256=<hex>`), `X-Chatwoot-Timestamp` 헤더를 함께 보냅니다.
+서명 대상 메시지는 raw body 단독이 아니라 `"{timestamp}.{raw_body}"` 형식이며,
+`app/services/verify.py`가 이 규칙으로 HMAC-SHA256을 재계산해 비교합니다.
+`CHATWOOT_WEBHOOK_SECRET`이 비어있으면 검증 자체를 생략합니다(로컬 개발용).
+
 ## Run
 
 ```bash

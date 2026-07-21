@@ -21,10 +21,11 @@ async def chatwoot_webhook(
     request: Request,
     payload: ChatwootWebhookPayload,
     x_chatwoot_signature: str = Header(default=""),
+    x_chatwoot_timestamp: str = Header(default=""),
 ):
     # ── 1. 서명 검증 ──────────────────────────────────────────────────────────
     raw_body = await request.body()
-    if not verify_webhook_signature(raw_body, x_chatwoot_signature):
+    if not verify_webhook_signature(raw_body, x_chatwoot_signature, x_chatwoot_timestamp):
         logger.warning("웹훅 서명 검증 실패")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -32,7 +33,6 @@ async def chatwoot_webhook(
         )
 
     logger.info("웹훅 수신 | event=%s", payload.event)
-
 
     # ── 2. message_created 이벤트만 처리 ─────────────────────────────────────
     if payload.event != "message_created":
