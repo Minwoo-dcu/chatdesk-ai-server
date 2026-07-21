@@ -1,11 +1,13 @@
 import logging
 
+from app.config import settings
 from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from app.models.schemas import ChatwootWebhookPayload
 from app.services.chatwoot_client import chatwoot_client
 from app.services.llm_client import get_ai_response
 from app.services.verify import verify_webhook_signature
+from app.services.handoff import should_handoff
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,17 @@ async def chatwoot_webhook(
         payload.sender.name if payload.sender else "unknown",
         user_content[:80],
     )
+
+    # ── 핸드오프 체크 ──────────────────────────────────────────────────────
+    if should_handoff(user_content):
+        logger.info("핸드오프 트리거 감지 | conv=%d", conversation_id)
+        chatwoot_client.assign_to_team(account_id, conversation_id, team_id=settings.default_team_id)
+        chatwoot_client.send_message(
+            account_id, conversation_id,
+            "상담원을 연결해드릴게요. 잠시만 기다려주세요."
+        )
+        return {"status": "ok", "action": "handoff"}
+
 
     # ── 4. AI 응답 생성 (llm_client.py 인터페이스 호출) ───────────────────────
     try:

@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     # LLM (팀원 담당 — llm_client.py에서 사용)
     groq_api_key: str = ""
+    default_team_id: int = 1
 
     class Config:
         env_file = ".env"
