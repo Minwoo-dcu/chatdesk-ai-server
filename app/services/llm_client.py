@@ -12,12 +12,10 @@ webhook.py는 아래 함수만 호출합니다:
 Groq API 기반 LLM 응답 생성
 """
 
-import os
-
-from dotenv import load_dotenv
 from groq import Groq
 
-load_dotenv()
+from app.config import settings
+from app.services.prompts import SYSTEM_PROMPT
 
 _client = None
 
@@ -28,8 +26,23 @@ def get_client():
     """
     global _client
     if _client is None:
-        _client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        _client = Groq(api_key=settings.groq_api_key)
     return _client
+
+
+def build_messages(message: str, history: list[dict]) -> list[dict]:
+    """
+    system 프롬프트 + 대화 이력 + 현재 메시지를 Groq messages 배열로 조립합니다.
+
+    Args:
+        message: 방금 수신한 사용자 메시지
+        history: [{"role": "user"|"assistant", "content": str}, ...]
+    """
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        *history,
+        {"role": "user", "content": message},
+    ]
 
 
 async def get_ai_response(
@@ -38,19 +51,14 @@ async def get_ai_response(
     history: list[dict],
 ) -> str:
     """
-    사용자 메시지를 받아 LLM 응답 생성
+    사용자 메시지와 대화 이력을 받아 LLM 응답 생성
     """
 
     client = get_client()
 
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
-        messages=[
-            {
-                "role": "user",
-                "content": message,
-            }
-        ],
+        messages=build_messages(message, history),
     )
 
     return response.choices[0].message.content

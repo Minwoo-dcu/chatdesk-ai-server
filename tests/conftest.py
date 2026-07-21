@@ -7,4 +7,4 @@ import os
 os.environ.setdefault("CHATWOOT_API_URL", "http://mock.chatwoot.local")
 os.environ.setdefault("CHATWOOT_API_TOKEN", "mock_token")
 os.environ.setdefault("CHATWOOT_WEBHOOK_SECRET", "")
-os.environ.setdefault("GEMINI_API_KEY", "")
+os.environ.setdefault("GROQ_API_KEY", "mock_groq_key")

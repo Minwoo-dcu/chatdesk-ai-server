@@ -119,17 +119,29 @@ def test_incoming_message_triggers_full_pipeline(mock_chatwoot, mock_llm, mock_v
     정상 incoming 메시지 → AI 호출 → Chatwoot 전송까지 전체 파이프라인 검증
     """
     mock_chatwoot.send_message.return_value = {"id": 99}
+    # 이력 조회: 이전 1턴 + 방금 수신한 현재 메시지(id=1, 중복 제외 대상)
+    mock_chatwoot.get_messages.return_value = [
+        {"id": 100, "content": "이전 질문입니다.", "message_type": 0, "private": False},
+        {"id": 101, "content": "이전 답변입니다.", "message_type": 1, "private": False},
+        {"id": 1, "content": "안녕하세요, 도움이 필요합니다.", "message_type": 0, "private": False},
+    ]
 
     res = post_webhook(INCOMING_PAYLOAD)
 
     assert res.status_code == 200
     assert res.json() == {"status": "ok"}
 
-    # AI 응답 생성 호출 확인
+    # 이력 조회 호출 확인
+    mock_chatwoot.get_messages.assert_called_once_with(3, 42)
+
+    # AI 응답 생성 호출 확인 — 현재 메시지(id=1)는 history에서 제외
     mock_llm.assert_called_once_with(
         message="안녕하세요, 도움이 필요합니다.",
         conversation_id=42,
-        history=[],
+        history=[
+            {"role": "user", "content": "이전 질문입니다."},
+            {"role": "assistant", "content": "이전 답변입니다."},
+        ],
     )
 
     # Chatwoot 전송 호출 확인
@@ -142,8 +154,10 @@ def test_incoming_message_triggers_full_pipeline(mock_chatwoot, mock_llm, mock_v
 
 @patch("app.routers.webhook.verify_webhook_signature", return_value=True)
 @patch("app.routers.webhook.get_ai_response", new_callable=AsyncMock, side_effect=Exception("LLM 오류"))
-def test_llm_failure_returns_502(mock_llm, mock_verify):
+@patch("app.routers.webhook.chatwoot_client")
+def test_llm_failure_returns_502(mock_chatwoot, mock_llm, mock_verify):
     """LLM 호출 실패 시 502 반환"""
+    mock_chatwoot.get_messages.return_value = []
     res = post_webhook(INCOMING_PAYLOAD)
     assert res.status_code == 502
     assert res.json()["detail"] == "AI service error"
@@ -154,6 +168,7 @@ def test_llm_failure_returns_502(mock_llm, mock_verify):
 @patch("app.routers.webhook.chatwoot_client")
 def test_chatwoot_send_failure_returns_502(mock_chatwoot, mock_llm, mock_verify):
     """Chatwoot 전송 실패 시 502 반환"""
+    mock_chatwoot.get_messages.return_value = []
     mock_chatwoot.send_message.side_effect = Exception("Chatwoot 오류")
     res = post_webhook(INCOMING_PAYLOAD)
     assert res.status_code == 502

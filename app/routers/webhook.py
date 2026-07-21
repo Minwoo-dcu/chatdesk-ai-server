@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from app.models.schemas import ChatwootWebhookPayload
-from app.services.chatwoot_client import chatwoot_client
+from app.services.chatwoot_client import build_history, chatwoot_client
 from app.services.llm_client import get_ai_response
 from app.services.verify import verify_webhook_signature
 
@@ -69,12 +69,20 @@ async def chatwoot_webhook(
         user_content[:80],
     )
 
-    # ── 4. AI 응답 생성 (llm_client.py 인터페이스 호출) ───────────────────────
+    # ── 4. 대화 이력 조회 (실패해도 응답은 계속 — 빈 history로 폴백) ──────────
+    try:
+        messages = chatwoot_client.get_messages(account_id, conversation_id)
+        history = build_history(messages, exclude_message_id=payload.id)
+    except Exception as exc:
+        logger.warning("대화 이력 조회 실패, 빈 history로 진행: %s", exc)
+        history = []
+
+    # ── 5. AI 응답 생성 (llm_client.py 인터페이스 호출) ───────────────────────
     try:
         reply = await get_ai_response(
             message=user_content,
             conversation_id=conversation_id,
-            history=[],  # TODO: 대화 이력 조회 추가 예정
+            history=history,
         )
     except Exception as exc:
         logger.exception("AI 응답 생성 실패: %s", exc)
@@ -83,7 +91,7 @@ async def chatwoot_webhook(
             detail="AI service error",
         ) from exc
 
-    # ── 5. Chatwoot에 응답 전송 ───────────────────────────────────────────────
+    # ── 6. Chatwoot에 응답 전송 ───────────────────────────────────────────────
     try:
         chatwoot_client.send_message(
             account_id=account_id,
