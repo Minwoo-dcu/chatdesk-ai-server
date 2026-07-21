@@ -46,14 +46,23 @@ class ChatwootClient:
         response = requests.post(url, json=payload, headers=self.headers, timeout=10)
         response.raise_for_status()
         return response.json()
-    def assign_to_team(self, account_id: int, conversation_id: int, team_id: int) -> dict:
-        """대화를 특정 팀에 배정 (팀 내 상담원 자동배정은 Chatwoot이 처리)"""
+    def assign_to_agent(self, account_id: int, conversation_id: int, assignee_id: int) -> dict:
+        """대화를 특정 상담원에게 배정 (assignee_agent_bot을 nil로 만들어 봇 파이프라인에서 완전히 뺌)"""
         url = (
             f"{self.base_url}/api/v1/accounts/{account_id}"
             f"/conversations/{conversation_id}/assignments"
         )
-        payload = {"team_id": team_id}
+        payload = {"assignee_id": assignee_id, "assignee_type": "User"}
         response = requests.post(url, json=payload, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    def get_conversation(self, account_id: int, conversation_id: int) -> dict:
+        """대화 정보를 조회 (현재 담당자가 누구인지 확인하는 용도)"""
+        url = (
+            f"{self.base_url}/api/v1/accounts/{account_id}"
+            f"/conversations/{conversation_id}"
+        )
+        response = requests.get(url, headers=self.headers, timeout=10)
         response.raise_for_status()
         return response.json()
 
