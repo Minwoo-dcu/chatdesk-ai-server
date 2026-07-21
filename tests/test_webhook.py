@@ -158,3 +158,21 @@ def test_chatwoot_send_failure_returns_502(mock_chatwoot, mock_llm, mock_verify)
     res = post_webhook(INCOMING_PAYLOAD)
     assert res.status_code == 502
     assert res.json()["detail"] == "Chatwoot API error"
+
+
+
+@patch("app.routers.webhook.verify_webhook_signature", return_value=True)
+def test_missing_conversation_id_is_ignored(mock_verify):
+    """
+    conversation_id 누락 시 무시 처리
+    """
+    payload = {
+        **INCOMING_PAYLOAD,
+        "conversation": None,
+    }
+
+    res = post_webhook(payload)
+
+    assert res.status_code == 200
+    assert res.json()["status"] == "ignored"
+    assert res.json()["reason"] == "missing ids"
