@@ -7,7 +7,7 @@ Chatwoot Agent Bot 웹훅을 수신해 AI 응답을 자동 전송하는 FastAPI 
 - Python 3.12
 - FastAPI + Uvicorn
 - Pydantic Settings
-- Google Gemini API (LLM)
+- Groq API (LLM)
 - Chatwoot Agent Bot (webhook)
 
 ## Project Structure
@@ -50,7 +50,7 @@ cp .env.example .env
 | `CHATWOOT_API_URL`        | ✅   | Chatwoot 서버 주소 (예: `http://localhost:3000`)                    |
 | `CHATWOOT_API_TOKEN`      | ✅   | Chatwoot Profile Settings의 Access Token                            |
 | `CHATWOOT_WEBHOOK_SECRET` | -    | Agent Bot Webhook Secret (비우면 검증 생략)                         |
-| `GEMINI_API_KEY`          | -    | Gemini API 키 ([AI Studio](https://aistudio.google.com/app/apikey)) |
+| `GROQ_API_KEY`            | -    | Groq API 키 ([Groq Console](https://console.groq.com/keys))         |
 
 ### 웹훅 서명 검증 방식
 
@@ -95,7 +95,7 @@ uvicorn app.main:app --reload --port 8080
 
 ## LLM Interface
 
-`app/services/llm_client.py`에서 아래 함수 시그니처를 유지하며 Gemini API로 구현:
+`app/services/llm_client.py`에서 아래 함수 시그니처를 유지하며 Groq API로 구현:
 
 ```python
 async def get_ai_response(

@@ -19,14 +19,17 @@ from groq import Groq
 
 load_dotenv()
 
+_client = None
+
 
 def get_client():
     """
-    Groq Client 생성
+    Groq Client 생성 (최초 호출 시 1회만 생성, 이후 재사용)
     """
-    return Groq(
-        api_key=os.getenv("GROQ_API_KEY")
-    )
+    global _client
+    if _client is None:
+        _client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    return _client
 
 
 async def get_ai_response(
