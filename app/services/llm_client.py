@@ -9,14 +9,13 @@ client = genai.Client(
 )
 
 
-def generate_response(message: str) -> str:
-    """
-    사용자 메시지를 받아 LLM 응답을 생성하는 함수
-    """
-
+async def get_ai_response(
+    message: str,
+    conversation_id: int,
+    history: list[dict],
+) -> str:
     response = client.models.generate_content(
         model="gemini-2.0-flash",
-        contents=message
+        contents=message,
     )
-
     return response.text
