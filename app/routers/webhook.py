@@ -7,7 +7,8 @@ from app.models.schemas import ChatwootWebhookPayload
 from app.services.chatwoot_client import chatwoot_client
 from app.services.llm_client import get_ai_response
 from app.services.verify import verify_webhook_signature
-from app.services.handoff import should_handoff
+from app.services.handoff_connection import should_handoff as should_handoff_connection
+from app.services.handoff_security import should_handoff as should_handoff_security
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ async def chatwoot_webhook(
         return {"status": "ignored", "reason": "already assigned to human"}
 
     # ── 핸드오프 체크 ──────────────────────────────────────────────────────
-    if should_handoff(user_content):
+    if should_handoff_connection(user_content) or should_handoff_security(user_content):
         logger.info("핸드오프 트리거 감지 | conv=%d", conversation_id)
         inbox_id = payload.inbox.get("id") if payload.inbox else None
         online_agents = chatwoot_client.get_online_agents(account_id, inbox_id) if inbox_id else []
