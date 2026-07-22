@@ -8,13 +8,18 @@ class ChatwootSender(BaseModel):
     name: str
     email: Optional[str] = None
     type: Optional[str] = None  # "contact" | "agent" | "bot"
+class ChatwootAssignee(BaseModel):
+    id: int
+    name: Optional[str] = None
 
+class ChatwootMeta(BaseModel):
+    assignee: Optional[ChatwootAssignee] = None
 
 class ChatwootConversation(BaseModel):
     id: int
     inbox_id: int
     status: Optional[str] = None
-
+    meta: Optional[ChatwootMeta] = None
 
 class ChatwootWebhookPayload(BaseModel):
     """

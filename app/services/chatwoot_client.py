@@ -24,15 +24,6 @@ class ChatwootClient:
         content: str,
         private: bool = False,
     ) -> dict:
-        """
-        특정 대화(conversation)에 봇 메시지를 전송합니다.
-
-        Args:
-            account_id: Chatwoot 계정 ID (웹훅 페이로드의 account.id)
-            conversation_id: 대화 ID
-            content: 전송할 메시지 본문
-            private: True이면 내부 노트(상담사만 볼 수 있음)
-        """
         url = (
             f"{self.base_url}/api/v1/accounts/{account_id}"
             f"/conversations/{conversation_id}/messages"
@@ -48,12 +39,7 @@ class ChatwootClient:
         return response.json()
 
     def get_messages(self, account_id: int, conversation_id: int) -> list[dict]:
-        """
-        특정 대화의 메시지 목록을 조회합니다 (최근 메시지 순, Chatwoot 기본 20건).
-
-        Returns:
-            메시지 dict 리스트 (오래된 것 → 최신 순)
-        """
+        """특정 대화의 메시지 목록을 조회합니다 (최근 메시지 순, Chatwoot 기본 20건)."""
         url = (
             f"{self.base_url}/api/v1/accounts/{account_id}"
             f"/conversations/{conversation_id}/messages"
@@ -61,8 +47,50 @@ class ChatwootClient:
         response = requests.get(url, headers=self.headers, timeout=10)
         response.raise_for_status()
         data = response.json()
-        # Chatwoot는 {"meta": ..., "payload": [...]} 형태로 응답
         return data.get("payload", []) if isinstance(data, dict) else data
+
+    def assign_to_agent(self, account_id: int, conversation_id: int, assignee_id: int) -> dict:
+        """대화를 특정 상담원에게 배정 (assignee_agent_bot을 nil로 만들어 봇 파이프라인에서 완전히 뺌)"""
+        url = (
+            f"{self.base_url}/api/v1/accounts/{account_id}"
+            f"/conversations/{conversation_id}/assignments"
+        )
+        payload = {"assignee_id": assignee_id, "assignee_type": "User"}
+        response = requests.post(url, json=payload, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+
+    def get_online_agents(self, account_id: int, inbox_id: int) -> list[dict]:
+        """해당 인박스에서 배정 가능한 온라인 상담원 목록 조회"""
+        url = (
+            f"{self.base_url}/api/v1/accounts/{account_id}"
+            f"/inboxes/{inbox_id}/assignable_agents"
+        )
+        response = requests.get(url, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+        agents = payload.get("payload", payload if isinstance(payload, list) else [])
+        return [a for a in agents if a.get("availability_status") == "online"]
+
+    def toggle_typing(self, account_id: int, conversation_id: int, status: str = "off") -> None:
+        """타이핑 인디케이터를 강제로 끄는 API 호출"""
+        url = (
+            f"{self.base_url}/api/v1/accounts/{account_id}"
+            f"/conversations/{conversation_id}/toggle_typing_status"
+        )
+        payload = {"typing_status": status, "is_private": False}
+        response = requests.post(url, json=payload, headers=self.headers, timeout=10)
+        response.raise_for_status()
+
+    def get_conversation(self, account_id: int, conversation_id: int) -> dict:
+        """대화 정보를 조회 (현재 담당자가 누구인지 확인하는 용도)"""
+        url = (
+            f"{self.base_url}/api/v1/accounts/{account_id}"
+            f"/conversations/{conversation_id}"
+        )
+        response = requests.get(url, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
 
 
 def build_history(
@@ -72,14 +100,10 @@ def build_history(
 ) -> list[dict]:
     """
     Chatwoot 메시지 목록을 LLM history 형식으로 변환합니다.
-
     - incoming(0) → user, outgoing(1) → assistant
     - activity/template, private 노트, 빈 content는 제외
     - exclude_message_id와 일치하는 메시지(방금 수신한 현재 메시지)는 제외
     - 최근 max_turns개만 유지
-
-    Returns:
-        [{"role": "user"|"assistant", "content": str}, ...]
     """
     role_map = {0: "user", 1: "assistant", "incoming": "user", "outgoing": "assistant"}
     history = []
