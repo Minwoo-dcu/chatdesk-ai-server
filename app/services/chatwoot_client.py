@@ -56,6 +56,15 @@ class ChatwootClient:
         response = requests.post(url, json=payload, headers=self.headers, timeout=10)
         response.raise_for_status()
         return response.json()
+    def toggle_typing(self, account_id: int, conversation_id: int, status: str = "off") -> None:
+        """타이핑 인디케이터를 강제로 끄는 API 호출"""
+        url = (
+            f"{self.base_url}/api/v1/accounts/{account_id}"
+            f"/conversations/{conversation_id}/toggle_typing_status"
+        )
+        payload = {"typing_status": status, "is_private": False}
+        response = requests.post(url, json=payload, headers=self.headers, timeout=10)
+        response.raise_for_status()
     def get_conversation(self, account_id: int, conversation_id: int) -> dict:
         """대화 정보를 조회 (현재 담당자가 누구인지 확인하는 용도)"""
         url = (
