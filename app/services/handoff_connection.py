@@ -1,7 +1,8 @@
 import logging
-import os
 
 from groq import Groq
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ _client = None
 def get_client():
     global _client
     if _client is None:
-        _client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        _client = Groq(api_key=settings.groq_api_key)
     return _client
 
 
