@@ -74,7 +74,7 @@ async def chatwoot_webhook(
     # ── 핸드오프 체크 ──────────────────────────────────────────────────────
     if should_handoff(user_content):
         logger.info("핸드오프 트리거 감지 | conv=%d", conversation_id)
-        chatwoot_client.assign_to_agent(account_id, conversation_id, assignee_id=settings.default_agent_id)
+        assign_result = chatwoot_client.assign_to_agent(account_id, conversation_id, assignee_id=settings.default_agent_id)
         chatwoot_client.send_message(
             account_id, conversation_id,
             "상담원을 연결해드릴게요. 잠시만 기다려주세요."
@@ -82,12 +82,10 @@ async def chatwoot_webhook(
         return {"status": "ok", "action": "handoff"}
 
 
-    # ── 이미 사람이 담당 중인지 체크 ────────────────────────────────────────
-    conversation_data = chatwoot_client.get_conversation(account_id, conversation_id)
-    if conversation_data.get("meta", {}).get("assignee"):
+    # ── 이미 사람이 담당 중인지 체크 (API 호출 없이 페이로드에서 바로 확인) ──
+    if payload.conversation and payload.conversation.meta and payload.conversation.meta.assignee:
         logger.info("이미 사람 담당 중, AI 응답 생략 | conv=%d", conversation_id)
         return {"status": "ignored", "reason": "already assigned to human"}
-
     # ── 4. AI 응답 생성 (llm_client.py 인터페이스 호출) ───────────────────────
     try:
         reply = await get_ai_response(
