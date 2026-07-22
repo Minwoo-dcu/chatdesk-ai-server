@@ -56,6 +56,17 @@ class ChatwootClient:
         response = requests.post(url, json=payload, headers=self.headers, timeout=10)
         response.raise_for_status()
         return response.json()
+    def get_online_agents(self, account_id: int, inbox_id: int) -> list[dict]:
+        """해당 인박스에서 배정 가능한 온라인 상담원 목록 조회"""
+        url = (
+            f"{self.base_url}/api/v1/accounts/{account_id}"
+            f"/inboxes/{inbox_id}/assignable_agents"
+        )
+        response = requests.get(url, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+        agents = payload.get("payload", payload if isinstance(payload, list) else [])
+        return [a for a in agents if a.get("availability_status") == "online"]
     def toggle_typing(self, account_id: int, conversation_id: int, status: str = "off") -> None:
         """타이핑 인디케이터를 강제로 끄는 API 호출"""
         url = (

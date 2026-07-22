@@ -29,19 +29,14 @@ async def chatwoot_webhook(
     raw_body = await request.body()
     if not verify_webhook_signature(raw_body, x_chatwoot_signature, x_chatwoot_timestamp):
         logger.warning("웹훅 서명 검증 실패")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid webhook signature",
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
 
     logger.info("웹훅 수신 | event=%s", payload.event)
 
-    # ── 2. message_created 이벤트만 처리 ─────────────────────────────────────
     if payload.event != "message_created":
         logger.debug("이벤트 무시: %s", payload.event)
         return {"status": "ignored", "reason": "event not handled"}
 
-    # Agent Bot 웹훅은 message_type을 최상위에 문자열로 전달합니다 ("incoming" | "outgoing")
     if payload.message_type != "incoming":
         return {"status": "ignored", "reason": "not an incoming message"}
 
@@ -49,68 +44,64 @@ async def chatwoot_webhook(
     if not user_content:
         return {"status": "ignored", "reason": "empty content"}
 
-    # ── 3. 컨텍스트 추출 ──────────────────────────────────────────────────────
     account = payload.account or {}
     account_id: int | None = account.get("id")
     conversation = payload.conversation
     conversation_id: int | None = conversation.id if conversation else None
 
     if not account_id or not conversation_id:
-        logger.error(
-            "account_id 또는 conversation_id 누락 | account=%s conversation=%s",
-            account_id,
-            conversation_id,
-        )
+        logger.error("account_id 또는 conversation_id 누락 | account=%s conversation=%s", account_id, conversation_id)
         return {"status": "ignored", "reason": "missing ids"}
 
     logger.info(
         "처리 시작 | account=%d conv=%d sender=%s msg=%s",
-        account_id,
-        conversation_id,
+        account_id, conversation_id,
         payload.sender.name if payload.sender else "unknown",
         user_content[:80],
     )
-    # ── 이미 사람이 담당 중인지 체크 (핸드오프 체크보다 먼저!) ──
+
+    # ── 이미 사람이 담당 중인지 체크 (핸드오프 체크보다 반드시 먼저) ──────────
     if payload.conversation and payload.conversation.meta and payload.conversation.meta.assignee:
         logger.info("이미 사람 담당 중, AI 응답 생략 | conv=%d", conversation_id)
         chatwoot_client.toggle_typing(account_id, conversation_id, status="off")
         return {"status": "ignored", "reason": "already assigned to human"}
+
     # ── 핸드오프 체크 ──────────────────────────────────────────────────────
     if should_handoff(user_content):
         logger.info("핸드오프 트리거 감지 | conv=%d", conversation_id)
-        assign_result = chatwoot_client.assign_to_agent(account_id, conversation_id, assignee_id=settings.default_agent_id)
+        inbox_id = payload.inbox.get("id") if payload.inbox else None
+        online_agents = chatwoot_client.get_online_agents(account_id, inbox_id) if inbox_id else []
+
+        if online_agents:
+            chosen_agent = online_agents[0]
+            chatwoot_client.assign_to_agent(account_id, conversation_id, assignee_id=chosen_agent["id"])
+            logger.info("온라인 상담원 배정 | agent_id=%s name=%s", chosen_agent["id"], chosen_agent.get("name"))
+        else:
+            chatwoot_client.assign_to_agent(account_id, conversation_id, assignee_id=settings.default_agent_id)
+            logger.warning("온라인 상담원 없음, 기본 상담원(%s)으로 폴백", settings.default_agent_id)
+
         chatwoot_client.send_message(
             account_id, conversation_id,
             "상담원을 연결해드릴게요. 잠시만 기다려주세요."
         )
         return {"status": "ok", "action": "handoff"}
-    # ── 4. AI 응답 생성 (llm_client.py 인터페이스 호출) ───────────────────────
+
+    # ── AI 응답 생성 ───────────────────────────────────────────────────────
     try:
         reply = await get_ai_response(
             message=user_content,
             conversation_id=conversation_id,
-            history=[],  # TODO: 대화 이력 조회 추가 예정
+            history=[],  # multi-turn-context 브랜치 병합 후 채워질 예정
         )
     except Exception as exc:
         logger.exception("AI 응답 생성 실패: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI service error",
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI service error") from exc
 
-    # ── 5. Chatwoot에 응답 전송 ───────────────────────────────────────────────
     try:
-        chatwoot_client.send_message(
-            account_id=account_id,
-            conversation_id=conversation_id,
-            content=reply,
-        )
+        chatwoot_client.send_message(account_id=account_id, conversation_id=conversation_id, content=reply)
         logger.info("응답 전송 완료 | conv=%d reply=%s", conversation_id, reply[:80])
     except Exception as exc:
         logger.exception("Chatwoot 메시지 전송 실패: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Chatwoot API error",
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Chatwoot API error") from exc
 
     return {"status": "ok"}
