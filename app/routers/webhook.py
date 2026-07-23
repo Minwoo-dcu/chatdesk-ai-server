@@ -105,7 +105,7 @@ async def chatwoot_webhook(
             logger.info("온라인 상담원 배정 | agent_id=%s name=%s", chosen_agent["id"], chosen_agent.get("name"))
             chatwoot_client.send_message(
                 account_id, conversation_id,
-                "상담원을 연결해드릴게요. 잠시만 기다려주세요."
+                "상담원과 연결되었습니다."
             )
             return {"status": "ok", "action": "handoff"}
         else:
