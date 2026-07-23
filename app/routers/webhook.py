@@ -68,11 +68,16 @@ async def chatwoot_webhook(
         return {"status": "ignored", "reason": "already assigned to human"}
 
     # ── 핸드오프 체크 ──────────────────────────────────────────────────────
-    if should_handoff_connection(user_content) or should_handoff_security(user_content):
+    is_security_issue = should_handoff_security(user_content)
+    if should_handoff_connection(user_content) or is_security_issue:
         logger.info("핸드오프 트리거 감지 | conv=%d", conversation_id)
+
+        if is_security_issue:
+            chatwoot_client.set_priority(account_id, conversation_id, priority="urgent")
+            logger.info("보안·금전 이슈 감지 → 우선순위 urgent 설정 | conv=%d", conversation_id)
+
         inbox_id = payload.inbox.get("id") if payload.inbox else None
         online_agents = chatwoot_client.get_online_agents(account_id, inbox_id) if inbox_id else []
-
         if online_agents:
             chosen_agent = online_agents[0]
             chatwoot_client.assign_to_agent(account_id, conversation_id, assignee_id=chosen_agent["id"])
@@ -80,12 +85,12 @@ async def chatwoot_webhook(
         else:
             chatwoot_client.assign_to_agent(account_id, conversation_id, assignee_id=settings.default_agent_id)
             logger.warning("온라인 상담원 없음, 기본 상담원(%s)으로 폴백", settings.default_agent_id)
-
         chatwoot_client.send_message(
             account_id, conversation_id,
             "상담원을 연결해드릴게요. 잠시만 기다려주세요."
         )
         return {"status": "ok", "action": "handoff"}
+
 
     # ── AI 응답 생성 ───────────────────────────────────────────────────────
     try:
