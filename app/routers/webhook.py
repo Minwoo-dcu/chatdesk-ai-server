@@ -7,6 +7,7 @@ from app.models.schemas import ChatwootWebhookPayload
 from app.services.chatwoot_client import chatwoot_client
 from app.services.llm_client import get_ai_response
 from app.services.verify import verify_webhook_signature
+from app.services.handoff_complaint import should_handoff as should_handoff_complaint
 from app.services.handoff_connection import should_handoff as should_handoff_connection
 from app.services.handoff_security import should_handoff as should_handoff_security
 
@@ -69,12 +70,17 @@ async def chatwoot_webhook(
 
     # ── 핸드오프 체크 ──────────────────────────────────────────────────────
     is_security_issue = should_handoff_security(user_content)
-    if should_handoff_connection(user_content) or is_security_issue:
+    is_complaint = should_handoff_complaint(user_content)
+    if should_handoff_connection(user_content) or is_security_issue or is_complaint:
         logger.info("핸드오프 트리거 감지 | conv=%d", conversation_id)
 
         if is_security_issue:
             chatwoot_client.set_priority(account_id, conversation_id, priority="urgent")
             logger.info("보안·금전 이슈 감지 → 우선순위 urgent 설정 | conv=%d", conversation_id)
+        if is_complaint:
+            chatwoot_client.add_labels(account_id, conversation_id, ["컴플레인"])
+            logger.info("컴플레인 감지 → 라벨 추가 | conv=%d", conversation_id)
+           # TODO: 라벨 추가시 각 핸드오프 체크시마다 chatwoot_client.add_labels(...) 추가
 
         inbox_id = payload.inbox.get("id") if payload.inbox else None
         online_agents = chatwoot_client.get_online_agents(account_id, inbox_id) if inbox_id else []

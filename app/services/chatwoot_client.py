@@ -56,6 +56,15 @@ class ChatwootClient:
         response = requests.post(url, json=payload, headers=self.headers, timeout=10)
         response.raise_for_status()
         return response.json()
+    def add_labels(self, account_id: int, conversation_id: int, labels: list[str]) -> None:
+        """대화에 라벨 추가"""
+        url = (
+            f"{self.base_url}/api/v1/accounts/{account_id}"
+            f"/conversations/{conversation_id}/labels"
+        )
+        payload = {"labels": labels}
+        response = requests.post(url, json=payload, headers=self.headers, timeout=10)
+        response.raise_for_status()
     def set_priority(self, account_id: int, conversation_id: int, priority: str) -> None:
         """대화 우선순위 설정 (low/medium/high/urgent)"""
         url = (
