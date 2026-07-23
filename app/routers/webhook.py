@@ -28,7 +28,6 @@ async def chatwoot_webhook(
     x_chatwoot_signature: str = Header(default=""),
     x_chatwoot_timestamp: str = Header(default=""),
 ):
-    # ── 1. 서명 검증 ──────────────────────────────────────────────────────────
     raw_body = await request.body()
     if not verify_webhook_signature(raw_body, x_chatwoot_signature, x_chatwoot_timestamp):
         logger.warning("웹훅 서명 검증 실패")
@@ -63,17 +62,17 @@ async def chatwoot_webhook(
         user_content[:80],
     )
 
-    # ── 2. 이미 사람이 담당 중인지 체크 (핸드오프 체크보다 반드시 먼저) ────────
+    # ── 이미 사람이 담당 중인지 체크 (핸드오프 체크보다 반드시 먼저) ──────────
     if payload.conversation and payload.conversation.meta and payload.conversation.meta.assignee:
         logger.info("이미 사람 담당 중, AI 응답 생략 | conv=%d", conversation_id)
         chatwoot_client.toggle_typing(account_id, conversation_id, status="off")
         return {"status": "ignored", "reason": "already assigned to human"}
 
-    # ── 3. 인박스 정보 미리 조회 (영업시간 + 온라인 상담원 판단에 공용 사용) ───
+    # ── 인박스 정보 미리 조회 ─────────────────────────────────────────────────
     inbox_id = payload.inbox.get("id") if payload.inbox else None
     inbox_data = chatwoot_client.get_inbox(account_id, inbox_id) if inbox_id else {}
 
-    # ── 4. 영업시간 외 체크 (핸드오프보다 먼저) ────────────────────────────────
+    # ── 영업시간 외 체크 ──────────────────────────────────────────────────────
     if not is_within_business_hours(inbox_data):
         chatwoot_client.add_labels(account_id, conversation_id, ["미배정"])
         chatwoot_client.send_message(
@@ -83,7 +82,7 @@ async def chatwoot_webhook(
         logger.info("영업시간 외 접수 | conv=%d", conversation_id)
         return {"status": "ok", "action": "out_of_office"}
 
-    # ── 5. 핸드오프 체크 ──────────────────────────────────────────────────────
+    # ── 핸드오프 체크 ──────────────────────────────────────────────────────
     is_security_issue = should_handoff_security(user_content)
     is_complaint = should_handoff_complaint(user_content)
     if should_handoff_connection(user_content) or is_security_issue or is_complaint:
@@ -95,20 +94,21 @@ async def chatwoot_webhook(
         if is_complaint:
             chatwoot_client.add_labels(account_id, conversation_id, ["컴플레인"])
             logger.info("컴플레인 감지 → 라벨 추가 | conv=%d", conversation_id)
-            # TODO: 새 핸드오프 유형 추가시 여기 chatwoot_client.add_labels(...) 한 줄만 추가
 
         online_agents = chatwoot_client.get_online_agents(account_id, inbox_id) if inbox_id else []
 
         if online_agents:
             chosen_agent = online_agents[0]
             chatwoot_client.assign_to_agent(account_id, conversation_id, assignee_id=chosen_agent["id"])
+            chatwoot_client.toggle_status(account_id, conversation_id, status="open")
             logger.info("온라인 상담원 배정 | agent_id=%s name=%s", chosen_agent["id"], chosen_agent.get("name"))
             chatwoot_client.send_message(
                 account_id, conversation_id,
-                "상담원과 연결되었습니다."
+                "상담원과 연결되었습니다. 문의하실 내용을 남겨주시면 확인 후 답변드리겠습니다."
             )
             return {"status": "ok", "action": "handoff"}
         else:
+            chatwoot_client.add_labels(account_id, conversation_id, ["미배정"])
             chatwoot_client.send_message(
                 account_id, conversation_id,
                 "현재 상담 가능한 상담원이 없어 순차적으로 연결해드리겠습니다."
@@ -116,7 +116,7 @@ async def chatwoot_webhook(
             logger.warning("온라인 상담원 없음, 미배정 상태로 접수 | conv=%d", conversation_id)
             return {"status": "ok", "action": "no_agent_available"}
 
-    # ── 6. 대화 이력 조회 (실패해도 응답은 계속 — 빈 history로 폴백) ──────────
+    # ── 대화 이력 조회 ────────────────────────────────────────────────────────
     try:
         messages = chatwoot_client.get_messages(account_id, conversation_id)
         history = build_history(messages, exclude_message_id=payload.id)
@@ -124,7 +124,7 @@ async def chatwoot_webhook(
         logger.warning("대화 이력 조회 실패, 빈 history로 진행: %s", exc)
         history = []
 
-    # ── 7. AI 응답 생성 (llm_client.py 인터페이스 호출) ───────────────────────
+    # ── AI 응답 생성 ─────────────────────────────────────────────────────────
     try:
         reply = await get_ai_response(
             message=user_content,
@@ -135,7 +135,7 @@ async def chatwoot_webhook(
         logger.exception("AI 응답 생성 실패: %s", exc)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI service error") from exc
 
-    # ── 8. Chatwoot에 응답 전송 ───────────────────────────────────────────────
+    # ── Chatwoot에 응답 전송 ─────────────────────────────────────────────────
     try:
         chatwoot_client.send_message(account_id=account_id, conversation_id=conversation_id, content=reply)
         logger.info("응답 전송 완료 | conv=%d reply=%s", conversation_id, reply[:80])
