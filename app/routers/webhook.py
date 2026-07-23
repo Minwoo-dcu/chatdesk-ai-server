@@ -109,7 +109,6 @@ async def chatwoot_webhook(
             )
             return {"status": "ok", "action": "handoff"}
         else:
-            chatwoot_client.add_labels(account_id, conversation_id, ["미배정"])
             chatwoot_client.send_message(
                 account_id, conversation_id,
                 "현재 상담 가능한 상담원이 없어 순차적으로 연결해드리겠습니다."
