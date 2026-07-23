@@ -1,0 +1,27 @@
+{
+  "refund": {
+    "keywords": [
+      "환불",
+      "환불 규정",
+      "환불 정책"
+    ],
+    "answer": "환불은 구매 후 7일 이내 가능합니다.",
+    "confidence": 0.95
+  },
+  "exchange": {
+    "keywords": [
+      "교환",
+      "교환 규정"
+    ],
+    "answer": "제품 불량인 경우 교환 가능합니다.",
+    "confidence": 0.94
+  },
+  "delivery": {
+    "keywords": [
+      "배송",
+      "배송기간"
+    ],
+    "answer": "평균 배송 기간은 영업일 기준 2~3일입니다.",
+    "confidence": 0.91
+  }
+}
