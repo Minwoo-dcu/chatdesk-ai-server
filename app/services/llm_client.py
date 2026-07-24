@@ -44,6 +44,23 @@ def build_messages(message: str, history: list[dict]) -> list[dict]:
         {"role": "user", "content": message},
     ]
 
+def confirm_intent(message: str, prompt: str) -> bool:
+    """
+    애매한 경우에만 호출: 주어진 판단 기준(prompt)에 따라
+    LLM한테 실제 의도가 맞는지 YES/NO로 확인받음
+    """
+    client = get_client()
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": message},
+        ],
+        temperature=0,
+    )
+    answer = response.choices[0].message.content.strip()
+    return "YES" in answer.upper()
+
 
 async def get_ai_response(
     message: str,
