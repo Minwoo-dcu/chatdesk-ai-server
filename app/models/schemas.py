@@ -38,7 +38,13 @@ class ChatwootWebhookPayload(BaseModel):
     created_at: Optional[Any] = None
     sender: Optional[ChatwootSender] = None
     inbox: Optional[dict[str, Any]] = None
+    content_attributes: Optional[dict[str, Any]] = None  # input_select 선택값(submitted_values) 등
 
     # 대화 / 계정 정보
     conversation: Optional[ChatwootConversation] = None
     account: Optional[dict[str, Any]] = None
+
+    # webwidget_triggered 이벤트 필드 (위젯 오픈 시 최상위에 위치)
+    contact: Optional[dict[str, Any]] = None
+    current_conversation: Optional[ChatwootConversation] = None  # null이면 첫 방문
+    source_id: Optional[str] = None
