@@ -48,7 +48,8 @@ cp .env.example .env
 | 변수명                    | 필수 | 설명                                                                |
 | ------------------------- | ---- | ------------------------------------------------------------------- |
 | `CHATWOOT_API_URL`        | ✅   | Chatwoot 서버 주소 (예: `http://localhost:3000`)                    |
-| `CHATWOOT_API_TOKEN`      | ✅   | Chatwoot Profile Settings의 Access Token                            |
+| `CHATWOOT_API_TOKEN`      | ✅   | User 토큰 (Profile Settings > Access Token). 배정·라벨·우선순위 등 관리 API용 |
+| `CHATWOOT_BOT_TOKEN`      | -    | AgentBot access_token (Settings > Bots). 봇 응답을 봇 명의로 전송. 비우면 API_TOKEN 폴백 |
 | `CHATWOOT_WEBHOOK_SECRET` | -    | Agent Bot Webhook Secret (비우면 검증 생략)                         |
 | `GROQ_API_KEY`            | -    | Groq API 키 ([Groq Console](https://console.groq.com/keys))         |
 

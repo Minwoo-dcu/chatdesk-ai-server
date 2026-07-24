@@ -12,8 +12,17 @@ class ChatwootClient:
 
     def __init__(self) -> None:
         self.base_url = settings.chatwoot_api_url.rstrip("/")
+        # User(관리자) 토큰 — 배정/라벨/우선순위/인박스/이력 등 관리 API용.
+        # AgentBot 토큰은 이런 관리 API에 401을 반환하므로 반드시 User 토큰을 써야 함.
         self.headers = {
             "api_access_token": settings.chatwoot_api_token,
+            "Content-Type": "application/json",
+        }
+        # AgentBot 토큰 — 봇 응답 전송 전용. 이 토큰으로 보낸 메시지는 sender.type=agent_bot로
+        # 봇 명의로 기록됨. 미설정 시 User 토큰으로 폴백(하위호환).
+        bot_token = settings.chatwoot_bot_token or settings.chatwoot_api_token
+        self.bot_headers = {
+            "api_access_token": bot_token,
             "Content-Type": "application/json",
         }
 
@@ -24,6 +33,7 @@ class ChatwootClient:
         content: str,
         private: bool = False,
     ) -> dict:
+        """봇 응답 메시지 전송. AgentBot 토큰(bot_headers)으로 보내 봇 명의로 기록되게 함."""
         url = (
             f"{self.base_url}/api/v1/accounts/{account_id}"
             f"/conversations/{conversation_id}/messages"
@@ -34,7 +44,7 @@ class ChatwootClient:
             "private": private,
         }
         logger.debug("Chatwoot 메시지 전송 → conv=%d: %s", conversation_id, content[:80])
-        response = requests.post(url, json=payload, headers=self.headers, timeout=10)
+        response = requests.post(url, json=payload, headers=self.bot_headers, timeout=10)
         response.raise_for_status()
         return response.json()
 
