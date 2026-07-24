@@ -73,12 +73,22 @@ uvicorn app.main:app --reload --port 8080
 
 1. Chatwoot → **Settings → Agent Bots → New Agent Bot**
 2. Webhook URL: `https://<your-domain>/webhook/chatwoot`
-   - 로컬 개발 시: [localtunnel](https://localtunnel.github.io/) 또는 ngrok으로 터널링
+   - 로컬 개발 시: **ngrok**으로 터널링 (localtunnel은 응답이 느려 Chatwoot 웹훅 dispatch가
+     `Net::OpenTimeout`으로 실패하는 경우가 있어 비권장)
    ```bash
-   # --subdomain 으로 고정 URL 사용 (매번 바뀌지 않음)
-   npx localtunnel --port 8080 --subdomain chatdesk-ai-nanoiti
-   # → https://chatdesk-ai-nanoiti.loca.lt/webhook/chatwoot
+   # 최초 1회: https://dashboard.ngrok.com/get-started/your-authtoken 에서 발급
+   ngrok config add-authtoken <YOUR_AUTHTOKEN>
+
+   # 서버 실행 후 별도 터미널에서
+   ngrok http 8080
+   # → 출력된 https://<random>.ngrok-free.dev 를 Webhook URL에 사용
    ```
+   - ngrok 무료 플랜은 재시작할 때마다 URL이 바뀜 — 재시작 때마다 Chatwoot Agent Bot의
+     Webhook URL을 새 주소로 다시 저장해야 함
+   - 자체호스팅 Chatwoot는 웹훅 URL이 사설 IP/내부 도메인으로 resolve되면
+     SSRF 방지 로직에 의해 강제로 거부됨(`Hostname ... has no public ip addresses`).
+     같은 도커 네트워크에 붙여 내부 호스트네임으로 직접 호출하는 방식은 동작하지 않으므로
+     반드시 공인 도메인(ngrok 등)을 통해야 함
 3. 생성된 **Webhook Secret**을 `.env`의 `CHATWOOT_WEBHOOK_SECRET`에 입력
 4. **Settings → Inboxes → (Inbox 선택) → Configuration → Agent Bot** 에서 봇 연결
 
