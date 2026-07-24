@@ -32,8 +32,14 @@ class ChatwootClient:
         conversation_id: int,
         content: str,
         private: bool = False,
+        content_type: str = "text",
+        content_attributes: dict | None = None,
     ) -> dict:
-        """봇 응답 메시지 전송. AgentBot 토큰(bot_headers)으로 보내 봇 명의로 기록되게 함."""
+        """봇 응답 메시지 전송. AgentBot 토큰(bot_headers)으로 보내 봇 명의로 기록되게 함.
+
+        content_type="input_select" + content_attributes={"items": [...]}로
+        문의유형 선택 버튼도 전송 가능.
+        """
         url = (
             f"{self.base_url}/api/v1/accounts/{account_id}"
             f"/conversations/{conversation_id}/messages"
@@ -42,9 +48,20 @@ class ChatwootClient:
             "content": content,
             "message_type": "outgoing",
             "private": private,
+            "content_type": content_type,
         }
-        logger.debug("Chatwoot 메시지 전송 → conv=%d: %s", conversation_id, content[:80])
+        if content_attributes is not None:
+            payload["content_attributes"] = content_attributes
+        logger.debug("Chatwoot 메시지 전송 → conv=%d type=%s: %s", conversation_id, content_type, content[:80])
         response = requests.post(url, json=payload, headers=self.bot_headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+
+    def create_conversation(self, account_id: int, source_id: str, inbox_id: int) -> dict:
+        """새 대화 생성 (위젯 첫 방문 시). User 토큰(headers) 사용."""
+        url = f"{self.base_url}/api/v1/accounts/{account_id}/conversations"
+        payload = {"source_id": source_id, "inbox_id": inbox_id}
+        response = requests.post(url, json=payload, headers=self.headers, timeout=10)
         response.raise_for_status()
         return response.json()
 

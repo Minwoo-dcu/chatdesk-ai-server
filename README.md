@@ -104,6 +104,15 @@ uvicorn app.main:app --reload --port 8080
   → Chatwoot API 응답 전송
 ```
 
+### 위젯 오픈 시 선제 인사 (webwidget_triggered)
+
+방문자가 웹 위젯을 열면 `webwidget_triggered` 이벤트가 수신되며, 봇이 먼저
+인사 메시지와 문의유형 선택 버튼(`input_select`)을 전송합니다. 인사 문구/버튼 항목은
+`app/services/prompts.py`(`GREETING_MESSAGE`, `INQUIRY_ITEMS`)에 정의되어 있습니다.
+중복 인사 방지 상태는 `app/services/conversation_state.py`의 인메모리 저장소로 관리하며,
+**서버 재시작 시 초기화**됩니다(영구성 필요 시 Redis 등으로 교체).
+선택한 문의유형은 이후 `get_ai_response` 호출 시 메시지 컨텍스트로 주입됩니다.
+
 ## LLM Interface
 
 `app/services/llm_client.py`에서 아래 함수 시그니처를 유지하며 Groq API로 구현:

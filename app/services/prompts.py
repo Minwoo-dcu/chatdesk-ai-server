@@ -35,3 +35,32 @@ SYSTEM_PROMPT = """당신은 나노아이티의 웹 상담 챗봇 "AI 상담원"
 - 확실하지 않은 내용은 추측하지 말고, "정확한 확인을 위해 상담사가 도와드릴 수 있습니다"라고 안내합니다.
 - 개인정보(카드번호, 비밀번호 등)는 절대 요청하지 않습니다.
 """
+
+
+# 위젯 오픈 시 봇이 먼저 보내는 인사 메시지
+GREETING_MESSAGE = "안녕하세요, 나노아이티 AI 상담원입니다. 어떤 도움이 필요하신가요?"
+
+# input_select 문의유형 버튼 items.
+# title=위젯에 표시되는 버튼 텍스트, value=클릭 시 content로 전달되는 값.
+# title과 value를 동일하게 두어, Chatwoot 버전에 따라 content에 무엇이 오든 매칭되게 함.
+INQUIRY_ITEMS = [
+    {"title": "제품 문의", "value": "제품 문의"},
+    {"title": "주문·배송", "value": "주문·배송"},
+    {"title": "환불·교환", "value": "환불·교환"},
+    {"title": "기술 지원", "value": "기술 지원"},
+    {"title": "기타 문의", "value": "기타 문의"},
+]
+
+# 선택값 매칭용 set — title과 value 양쪽 모두 포함.
+# Chatwoot 버전/설정에 따라 버튼 클릭 시 content에 title이 올지 value가 올지 다를 수 있어
+# 둘 다 매칭 대상으로 둔다.
+INQUIRY_VALUES = {item["value"] for item in INQUIRY_ITEMS} | {item["title"] for item in INQUIRY_ITEMS}
+
+
+def match_inquiry_value(content: str) -> str | None:
+    """content가 문의유형 버튼 선택값과 매칭되면 정규화된 값을 반환, 아니면 None.
+
+    앞뒤 공백을 제거하고 title/value 집합과 비교한다.
+    """
+    normalized = (content or "").strip()
+    return normalized if normalized in INQUIRY_VALUES else None
