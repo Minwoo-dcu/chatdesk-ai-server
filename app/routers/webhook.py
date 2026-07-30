@@ -7,9 +7,10 @@ from app.models.schemas import ChatwootWebhookPayload
 from app.services import conversation_state
 from app.services.business_hours import is_within_business_hours
 from app.services.chatwoot_client import build_history, chatwoot_client
-from app.services.handoff_rules import apply_actions, evaluate
+from app.services.handoff_rules import apply_actions, assign_or_queue, evaluate
 from app.services.llm_client import get_ai_response
 from app.services.prompts import GREETING_MESSAGE, INQUIRY_ITEMS, match_inquiry_value
+from app.services.rag_handoff import resolve as rag_resolve
 from app.services.verify import verify_webhook_signature
 
 logger = logging.getLogger(__name__)
@@ -118,7 +119,7 @@ async def chatwoot_webhook(
     )
 
     # ── 문의유형 버튼 선택값 저장 (버튼 클릭도 incoming 메시지로 옴) ──────────────
-    # 선택값을 저장만 하고 return하지 않음 → 아래 기존 흐름(핸드오프/LLM)으로 그대로 이어감.
+    # 선택값을 저장만 하고 return하지 않음 → 아래 기존 흐름(핸드오프/RAG/LLM)으로 그대로 이어감.
     # 이후 get_ai_response 호출 시 message에 컨텍스트로 주입됨.
     inquiry_selection = match_inquiry_value(user_content)
     if inquiry_selection:
@@ -145,35 +146,39 @@ async def chatwoot_webhook(
         logger.info("영업시간 외 접수 | conv=%d", conversation_id)
         return {"status": "ok", "action": "out_of_office"}
 
-    # ── 핸드오프 체크 ──────────────────────────────────────────────────────
+    # ── 핸드오프 판단 (A-1~A-4) ───────────────────────────────────────────────
     # 문의유형 버튼 선택값(예: "환불·교환")은 핸드오프 트리거 단어와 겹칠 수 있으므로
-    # 버튼 클릭 자체는 핸드오프 대상에서 제외하고 바로 LLM으로 넘긴다.
-    # (실제 상담 내용이 escalation이면 이후 자유 텍스트에서 핸드오프가 걸림)
+    # 버튼 클릭 자체는 핸드오프 대상에서 제외하고 바로 다음 단계(RAG/LLM)로 넘긴다.
     matched = [] if inquiry_selection else evaluate(user_content)
+
+    # ── RAG(A-5) 판단: A-1~A-4에서 안 걸렸을 때만 ──────────────────────────────
+    # 즉답은 핸드오프가 아니라 그 자리에서 바로 끝나는 별개 경로.
+    # 핸드오프로 판정되면 matched에 "rag"를 얹어 아래 실행 블록에 합류시킨다.
+    if not matched and not inquiry_selection:
+        rag_result = rag_resolve(user_content, inbox_data=inbox_data)
+
+        if rag_result["action"] == "answer":
+            chatwoot_client.send_message(account_id, conversation_id, rag_result["content"])
+            logger.info("RAG 지식베이스 응답 | conv=%d", conversation_id)
+            return {"status": "ok", "action": "rag_answer"}
+
+        if rag_result["action"] == "handoff":
+            logger.info("RAG 핸드오프 판정 | conv=%d reason=%s", conversation_id, rag_result["reason"])
+            chatwoot_client.add_labels(account_id, conversation_id, ["정보조회불가"])
+            matched = ["rag"]
+
+        # rag_result["action"] == "llm"이면 matched는 빈 채로 그대로 진행
+
+    # ── 핸드오프 실행 (A-1~A-4든 RAG든, 여기 한 곳에서만 처리) ──────────────────
     if matched:
-        logger.info("핸드오프 트리거 감지 | conv=%d rules=%s", conversation_id, matched)
-        apply_actions(matched, chatwoot_client, account_id, conversation_id)
-
-        online_agents = chatwoot_client.get_online_agents(account_id, inbox_id) if inbox_id else []
-
-        if online_agents:
-            chosen_agent = online_agents[0]
-            chatwoot_client.assign_to_agent(account_id, conversation_id, assignee_id=chosen_agent["id"])
-            chatwoot_client.toggle_status(account_id, conversation_id, status="open")
-            logger.info("온라인 상담원 배정 | agent_id=%s name=%s", chosen_agent["id"], chosen_agent.get("name"))
-            chatwoot_client.send_message(
-                account_id, conversation_id,
-                "상담원과 연결되었습니다. 문의하실 내용을 남겨주시면 확인 후 답변드리겠습니다."
-            )
-            return {"status": "ok", "action": "handoff", "rules": matched}
-        else:
-            chatwoot_client.add_labels(account_id, conversation_id, ["미배정"])
-            chatwoot_client.send_message(
-                account_id, conversation_id,
-                "현재 상담 가능한 상담원이 없어 순차적으로 연결해드리겠습니다."
-            )
-            logger.warning("온라인 상담원 없음, 미배정 상태로 접수 | conv=%d", conversation_id)
-            return {"status": "ok", "action": "no_agent_available", "rules": matched}
+        logger.info("핸드오프 실행 | conv=%d rules=%s", conversation_id, matched)
+        apply_actions(matched, chatwoot_client, account_id, conversation_id)  # "rag"는 ALL_RULES에 없어 조용히 무시됨
+        action = assign_or_queue(
+            chatwoot_client, account_id, conversation_id, inbox_id,
+            connected_message="상담원과 연결되었습니다. 문의하실 내용을 남겨주시면 확인 후 답변드리겠습니다.",
+            no_agent_message="현재 상담 가능한 상담원이 없어 순차적으로 연결해드리겠습니다.",
+        )
+        return {"status": "ok", "action": action, "rules": matched}
 
     # ── AI 응답 생성 + 전송 ────────────────────────────────────────────────────
     # 선택했던 문의유형이 있으면 message에 컨텍스트로 주입 (LLM 시그니처는 불변).

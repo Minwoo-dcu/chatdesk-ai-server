@@ -28,3 +28,22 @@ def is_within_business_hours(inbox_data: dict) -> bool:
         return open_hour <= now.hour < close_hour
 
     return False
+
+
+def format_business_hours(inbox_data: dict) -> str:
+    """Chatwoot 인박스의 영업시간 설정을 사용자에게 안내할 문장으로 변환."""
+    if not inbox_data.get("working_hours_enabled"):
+        return "24시간 상담 가능합니다."
+
+    days_kr = ["일", "월", "화", "수", "목", "금", "토"]
+    lines = []
+    for day in inbox_data.get("working_hours", []):
+        idx = day.get("day_of_week")
+        if day.get("closed_all_day"):
+            continue
+        if day.get("open_all_day"):
+            lines.append(f"{days_kr[idx]}: 24시간")
+        else:
+            lines.append(f"{days_kr[idx]}: {day.get('open_hour')}시~{day.get('close_hour')}시")
+
+    return "영업시간 안내\n" + "\n".join(lines) if lines else "영업시간 정보가 설정되어 있지 않습니다."

@@ -1,27 +1,54 @@
 {
+  "_notice": "이 파일의 answer 값들은 데모용 임시값입니다. 실제 운영 데이터로 교체 필요.",
   "refund": {
-    "keywords": [
-      "환불",
-      "환불 규정",
-      "환불 정책"
-    ],
-    "answer": "환불은 구매 후 7일 이내 가능합니다.",
+    "keywords": ["환불", "환불 규정", "환불 정책"],
+    "answer": "환불은 구매 후 7일 이내 가능합니다. 정확한 처리를 위해 주문번호와 사유를 알려주시면 상담원이 확인 후 처리해드리겠습니다.",
     "confidence": 0.95
   },
   "exchange": {
-    "keywords": [
-      "교환",
-      "교환 규정"
-    ],
-    "answer": "제품 불량인 경우 교환 가능합니다.",
+    "keywords": ["교환", "교환 규정"],
+    "answer": "제품 불량인 경우 교환 가능합니다. 정확한 처리를 위해 주문번호와 사유를 알려주시면 상담원이 확인 후 처리해드리겠습니다.",
     "confidence": 0.94
   },
   "delivery": {
-    "keywords": [
-      "배송",
-      "배송기간"
-    ],
+    "keywords": ["배송", "배송기간"],
     "answer": "평균 배송 기간은 영업일 기준 2~3일입니다.",
     "confidence": 0.91
-  }
+  },
+  "pricing": {
+    "keywords": ["가격", "얼마", "견적", "비용"],
+    "answer": "표준가는 100,000원이며, 현재 진행 중인 프로모션 적용 시 80,000원입니다. 구매 링크: https://example.com/product",
+    "confidence": 0.9
+  },
+  "promotion": {
+    "keywords": ["프로모션", "이벤트", "할인"],
+    "answer": "현재 신규 가입 시 20% 할인 프로모션이 진행 중입니다. 참여 링크: https://example.com/event",
+    "confidence": 0.9
+  },
+  "purchase_procedure": {
+    "keywords": ["구매 방법", "어떻게 사요", "주문 절차", "구매 절차"],
+    "answer": "구매는 다음 절차로 진행됩니다: 1) 상품 선택 2) 옵션 및 수량 확인 3) 결제수단 선택 4) 주문 완료. 지금 바로 진행하시겠어요?",
+    "confidence": 0.9
+  },
+  "company_policy": {
+    "keywords": ["영업시간", "운영시간", "고객센터"],
+    "answer": "고객센터 운영시간은 평일 09:00~18:00입니다.",
+    "confidence": 0.9,
+    "dynamic": "business_hours"
+  },
+  "channel_info": {
+    "keywords": ["전화 상담", "전화번호", "유선 상담"],
+    "answer": "전화 상담은 평일 09:00~18:00에 1234-5678으로 가능합니다.",
+    "confidence": 0.9
+  },
+  "inventory": {
+    "keywords": ["재고", "재고 있", "품절"],
+    "handoff_only": true,
+    "handoff_reason": "실시간 재고 데이터베이스 미연동"
+  },
+  "order_status": {
+    "keywords": ["주문 상태", "주문번호", "배송 어디", "배송 조회"],
+    "handoff_only": true,
+    "handoff_reason": "주문/배송 시스템 API 미연동"
+}
 }
