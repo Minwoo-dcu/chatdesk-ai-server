@@ -14,18 +14,28 @@ Chatwoot Agent Bot 웹훅을 수신해 AI 응답을 자동 전송하는 FastAPI 
 
 ```
 app/
-├── main.py                 # FastAPI 앱 생성, 라우터 등록
-├── config.py               # .env 값 로딩 (pydantic-settings)
+├── main.py                    # FastAPI 앱 생성, 라우터 등록
+├── config.py                  # .env 값 로딩 (pydantic-settings)
 ├── routers/
-│   └── webhook.py          # POST /webhook/chatwoot 엔드포인트
+│   └── webhook.py             # POST /webhook/chatwoot 엔드포인트, 전체 오케스트레이션
 ├── services/
-│   ├── chatwoot_client.py  # Chatwoot API 호출 (메시지 전송)
-│   ├── llm_client.py       # LLM 연동 인터페이스
-│   └── verify.py           # 웹훅 HMAC-SHA256 서명 검증
+│   ├── chatwoot_client.py     # Chatwoot API 호출 (메시지 전송/조회/배정/라벨 등)
+│   ├── llm_client.py          # Groq LLM 연동 (get_ai_response, confirm_intent)
+│   ├── verify.py              # 웹훅 HMAC-SHA256 서명 검증
+│   ├── handoff_rules.py       # 핸드오프 규칙(A-1~A-4): 보안/컴플레인/상담원 연결
+│   ├── rag_handoff.py         # RAG 지식베이스 기반 즉답/핸드오프 판단(A-5)
+│   ├── knowledge_base.py      # 지식베이스(JSON) 키워드 검색
+│   ├── business_hours.py      # Chatwoot 인박스 설정 기반 영업시간 판단
+│   ├── conversation_state.py  # 인사/문의유형 상태 (인메모리)
+│   └── prompts.py             # 시스템 프롬프트, 인사말, 문의유형 버튼 정의
 └── models/
-    └── schemas.py          # Chatwoot 웹훅 페이로드 Pydantic 모델
+    └── schemas.py             # Chatwoot 웹훅 페이로드 Pydantic 모델
+docs/
+├── glossary.md                # 용어/표기 규약
+└── poc/                       # RAG 지식베이스 등 PoC 문서
 tests/
-└── test_webhook.py         # 엔드포인트 테스트
+├── test_webhook.py            # 웹훅 엔드포인트 통합 테스트
+└── test_history.py            # 대화 이력 변환(build_history) 단위 테스트
 ```
 
 ## Setup
@@ -70,6 +80,16 @@ uvicorn app.main:app --reload
 uvicorn app.main:app --reload --port 8080
 ```
 
+### Docker로 실행
+
+```bash
+# .env 준비 (Setup 단계와 동일)
+docker compose up --build
+```
+
+`docker-compose.yml`이 `.env`를 그대로 컨테이너에 주입하고 8000 포트로 서비스합니다.
+`.dockerignore`로 `.env`/`.venv`/`.git`/tests 등은 이미지 빌드에서 제외됩니다.
+
 ## Chatwoot Agent Bot 연동
 
 1. Chatwoot → **Settings → Agent Bots → New Agent Bot**
@@ -97,11 +117,15 @@ uvicorn app.main:app --reload --port 8080
 
 ```
 고객 메시지
-  → Chatwoot Agent Bot
-  → POST /webhook/chatwoot
+  → Chatwoot Agent Bot → POST /webhook/chatwoot
   → 서명 검증 → 이벤트 필터 (incoming만)
-  → llm_client.get_ai_response()
-  → Chatwoot API 응답 전송
+  → 이미 사람이 담당 중? ─── 예 → AI 응답 생략, 종료
+  → 영업시간 외? ────────── 예 → 안내 메시지, 종료
+  → 핸드오프 규칙 매칭? (A-1~A-4: 보안/컴플레인/연결) ─ 예 → 온라인 상담원 배정 또는 대기 라벨, 종료
+  → RAG 지식베이스 매칭? (A-5)
+      ├─ confidence 높음 → 즉답, 종료
+      └─ 낮음/DB조회 필요 → 핸드오프, 종료
+  → 위 전부 해당 없음 → llm_client.get_ai_response() → Chatwoot API 응답 전송
 ```
 
 ### 위젯 오픈 시 선제 인사 (webwidget_triggered)
@@ -125,6 +149,11 @@ async def get_ai_response(
 ) -> str:
     ...
 ```
+
+## 참고 문서
+
+- [docs/glossary.md](docs/glossary.md) — 용어/표기 규약 (핸드오프, 문의유형, 인텐트 분류 정의)
+- [docs/poc/](docs/poc/) — RAG 지식베이스 PoC 관련 문서
 
 ## Branch Strategy
 
