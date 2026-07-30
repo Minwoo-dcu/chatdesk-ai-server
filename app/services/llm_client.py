@@ -26,7 +26,7 @@ def get_client():
     """
     global _client
     if _client is None:
-        _client = Groq(api_key=settings.groq_api_key)
+        _client = Groq(api_key=settings.groq_api_key, timeout=10.0)
     return _client
 
 

@@ -149,7 +149,14 @@ async def chatwoot_webhook(
     # 문의유형 버튼 선택값(예: "환불·교환")은 핸드오프 트리거 단어와 겹칠 수 있으므로
     # 버튼 클릭 자체는 핸드오프 대상에서 제외하고 바로 LLM으로 넘긴다.
     # (실제 상담 내용이 escalation이면 이후 자유 텍스트에서 핸드오프가 걸림)
-    matched = [] if inquiry_selection else evaluate(user_content)
+    if inquiry_selection:
+        matched = []
+    else:
+        try:
+            matched = evaluate(user_content)
+        except Exception:
+            logger.exception("핸드오프 판단 실패, 매칭 없음으로 처리 | conv=%d", conversation_id)
+            matched = []
     if matched:
         logger.info("핸드오프 트리거 감지 | conv=%d rules=%s", conversation_id, matched)
         apply_actions(matched, chatwoot_client, account_id, conversation_id)
