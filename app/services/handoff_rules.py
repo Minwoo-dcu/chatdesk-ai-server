@@ -97,7 +97,6 @@ def assign_or_queue(client, account_id: int, conversation_id: int, inbox_id: int
     if online_agents:
         chosen_agent = online_agents[0]
         client.assign_to_agent(account_id, conversation_id, assignee_id=chosen_agent["id"])
-        client.toggle_status(account_id, conversation_id, status="open")
         client.send_message(account_id, conversation_id, connected_message)
         return "handoff"
     else:
