@@ -248,12 +248,12 @@ def test_inquiry_context_prefixed_to_llm(mock_chatwoot, mock_llm, mock_verify):
 
     # 1) 유형 선택
     post_webhook(INQUIRY_SELECT_PAYLOAD)
-    # 2) 이후 자유 텍스트
-    followup = {**INCOMING_PAYLOAD, "id": 3, "content": "주문번호는 12345입니다."}
+    # 2) 이후 자유 텍스트 (RAG 지식베이스 키워드와 안 겹치는 문장 — LLM 경로로 가는지가 검증 대상)
+    followup = {**INCOMING_PAYLOAD, "id": 3, "content": "제 성함은 홍길동입니다."}
     post_webhook(followup)
 
     _, kwargs = mock_llm.call_args
-    assert kwargs["message"] == "[문의유형: 환불·교환] 주문번호는 12345입니다."
+    assert kwargs["message"] == "[문의유형: 환불·교환] 제 성함은 홍길동입니다."
 
 
 @patch("app.routers.webhook.verify_webhook_signature", return_value=True)
