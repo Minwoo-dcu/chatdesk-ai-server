@@ -97,6 +97,18 @@ def assign_or_queue(client, account_id: int, conversation_id: int, inbox_id: int
     if online_agents:
         chosen_agent = online_agents[0]
         client.assign_to_agent(account_id, conversation_id, assignee_id=chosen_agent["id"])
+
+        # 대화가 이미 open이면 toggle_status를 또 부를 필요 없음(불필요한 "다시 열었습니다"
+        # 활동 로그 방지). 반면 여러 번 대화가 오간 뒤(A-3 등)라 open이 아닐 수 있으므로
+        # 무조건 생략하지 않고 현재 상태를 확인해서 필요할 때만 전환한다.
+        try:
+            current = client.get_conversation(account_id, conversation_id)
+            if current.get("status") != "open":
+                client.toggle_status(account_id, conversation_id, status="open")
+        except Exception:
+            # 상태 조회 실패 시에도 배정 자체는 이미 됐으니, 안전하게 open 전환을 시도
+            client.toggle_status(account_id, conversation_id, status="open")
+
         client.send_message(account_id, conversation_id, connected_message)
         return "handoff"
     else:

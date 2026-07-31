@@ -26,7 +26,7 @@ def get_client():
     """
     global _client
     if _client is None:
-        _client = Groq(api_key=settings.groq_api_key, timeout=10.0)
+        _client = Groq(api_key=settings.groq_api_key)
     return _client
 
 
@@ -44,6 +44,7 @@ def build_messages(message: str, history: list[dict]) -> list[dict]:
         {"role": "user", "content": message},
     ]
 
+
 def confirm_intent(message: str, prompt: str) -> bool:
     """
     애매한 경우에만 호출: 주어진 판단 기준(prompt)에 따라
@@ -55,6 +56,32 @@ def confirm_intent(message: str, prompt: str) -> bool:
         messages=[
             {"role": "system", "content": prompt},
             {"role": "user", "content": message},
+        ],
+        temperature=0,
+    )
+    answer = response.choices[0].message.content.strip()
+    return "YES" in answer.upper()
+
+
+def is_repeated_inquiry(message: str, history: list[dict]) -> bool:
+    """
+    A-3(반복 문의) 판단: 직전 대화 이력을 보고, 이번 메시지가 아직 해결되지 않은
+    질문을 다른 표현으로 반복하는 것인지 확인한다. 자연스러운 새 질문·화제 전환은 반복이 아님.
+    판단 작업이므로 temperature=0으로 일관성을 유지한다.
+    """
+    client = get_client()
+    history_text = "\n".join(f"{h['role']}: {h['content']}" for h in history[-6:])
+    prompt = (
+        "아래는 고객과 AI 상담봇의 최근 대화 이력이야. "
+        "고객의 마지막 메시지가, 앞서 이미 물어봤지만 만족스럽게 해결되지 않은 질문을 "
+        "다른 표현으로 반복하는 것인지 판단해. 자연스러운 새 질문이나 화제 전환이면 반복이 아니야. "
+        "반복이면 'YES', 아니면 'NO'라고만 답해."
+    )
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": f"대화 이력:\n{history_text}\n\n판단 대상 메시지: {message}"},
         ],
         temperature=0,
     )

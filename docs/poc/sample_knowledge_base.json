@@ -32,7 +32,7 @@
   },
   "company_policy": {
     "keywords": ["영업시간", "운영시간", "고객센터"],
-    "answer": "고객센터 운영시간은 평일 09:00~18:00입니다.",
+    "answer": "고객센터 운영시간이 따로 설정되있지않습니다.",
     "confidence": 0.9,
     "dynamic": "business_hours"
   },

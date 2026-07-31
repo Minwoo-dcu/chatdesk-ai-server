@@ -8,7 +8,7 @@ from app.services import conversation_state
 from app.services.business_hours import is_within_business_hours
 from app.services.chatwoot_client import build_history, chatwoot_client
 from app.services.handoff_rules import apply_actions, assign_or_queue, evaluate
-from app.services.llm_client import get_ai_response
+from app.services.llm_client import get_ai_response, is_repeated_inquiry
 from app.services.prompts import GREETING_MESSAGE, INQUIRY_ITEMS, match_inquiry_value
 from app.services.rag_handoff import resolve as rag_resolve
 from app.services.verify import verify_webhook_signature
@@ -149,7 +149,14 @@ async def chatwoot_webhook(
     # ── 핸드오프 판단 (A-1~A-4) ───────────────────────────────────────────────
     # 문의유형 버튼 선택값(예: "환불·교환")은 핸드오프 트리거 단어와 겹칠 수 있으므로
     # 버튼 클릭 자체는 핸드오프 대상에서 제외하고 바로 다음 단계(RAG/LLM)로 넘긴다.
-    matched = [] if inquiry_selection else evaluate(user_content)
+    if inquiry_selection:
+        matched = []
+    else:
+        try:
+            matched = evaluate(user_content)
+        except Exception:
+            logger.exception("핸드오프 판단 실패, 매칭 없음으로 처리 | conv=%d", conversation_id)
+            matched = []
 
     # ── RAG(A-5) 판단: A-1~A-4에서 안 걸렸을 때만 ──────────────────────────────
     # 즉답은 핸드오프가 아니라 그 자리에서 바로 끝나는 별개 경로.
@@ -169,7 +176,30 @@ async def chatwoot_webhook(
 
         # rag_result["action"] == "llm"이면 matched는 빈 채로 그대로 진행
 
-    # ── 핸드오프 실행 (A-1~A-4든 RAG든, 여기 한 곳에서만 처리) ──────────────────
+    # ── A-3(반복 문의) 판단: 핸드오프·RAG 둘 다 안 걸려 LLM으로 넘어가는 경우만 ─────
+    # 매 메시지마다 LLM을 호출하면 지연·비용이 두 배가 되므로, 3턴마다 한 번만 체크한다.
+    if not matched and not inquiry_selection:
+        turn = conversation_state.increment_turn(conversation_id)
+        if conversation_state.should_check_repetition(conversation_id, every_n_turns=3):
+            try:
+                messages_for_check = chatwoot_client.get_messages(account_id, conversation_id)
+                history_for_check = build_history(messages_for_check, exclude_message_id=payload.id)
+            except Exception as exc:
+                logger.warning("A-3 판단용 이력 조회 실패, 판단 생략: %s", exc)
+                history_for_check = []
+
+            if history_for_check:
+                is_repeat = is_repeated_inquiry(user_content, history_for_check)
+                logger.info("A-3 반복 판단 실행 | conv=%d turn=%d result=%s", conversation_id, turn, is_repeat)
+                if is_repeat:
+                    repeat_count = conversation_state.increment_repeat_confirmed(conversation_id)
+                    logger.info("반복 문의 감지 | conv=%d turn=%d repeat_count=%d", conversation_id, turn, repeat_count)
+                    if repeat_count >= 2:
+                        conversation_state.reset_repeat_confirmed(conversation_id)
+                        chatwoot_client.add_labels(account_id, conversation_id, ["반복문의"])
+                        matched = ["repeated_inquiry"]
+
+    # ── 핸드오프 실행 (A-1~A-4든 RAG든 A-3든, 여기 한 곳에서만 처리) ────────────────
     if matched:
         logger.info("핸드오프 실행 | conv=%d rules=%s", conversation_id, matched)
         apply_actions(matched, chatwoot_client, account_id, conversation_id)  # "rag"는 ALL_RULES에 없어 조용히 무시됨
