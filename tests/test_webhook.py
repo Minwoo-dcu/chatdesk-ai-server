@@ -318,21 +318,23 @@ def test_incoming_message_triggers_full_pipeline(mock_chatwoot, mock_llm, mock_v
 @patch("app.routers.webhook.verify_webhook_signature", return_value=True)
 @patch("app.routers.webhook.get_ai_response", new_callable=AsyncMock, side_effect=Exception("LLM 오류"))
 @patch("app.routers.webhook.chatwoot_client")
-def test_llm_failure_returns_502(mock_chatwoot, mock_llm, mock_verify):
-    """LLM 호출 실패 시 502 반환"""
+def test_llm_failure_triggers_handoff(mock_chatwoot, mock_llm, mock_verify):
+    """LLM 호출 실패 시 200 반환 + 백그라운드에서 안내 메시지 + 핸드오프"""
     mock_chatwoot.get_messages.return_value = []
+    mock_chatwoot.get_online_agents.return_value = [{"id": 1, "name": "agent"}]
     res = post_webhook(INCOMING_PAYLOAD)
-    assert res.status_code == 502
-    assert res.json()["detail"] == "AI service error"
+    assert res.status_code == 200
+    # 웹훅은 즉시 200 반환, 실제 안내/핸드오프는 백그라운드에서 처리
 
 
 @patch("app.routers.webhook.verify_webhook_signature", return_value=True)
 @patch("app.routers.webhook.get_ai_response", new_callable=AsyncMock, return_value="답변")
 @patch("app.routers.webhook.chatwoot_client")
-def test_chatwoot_send_failure_returns_502(mock_chatwoot, mock_llm, mock_verify):
-    """Chatwoot 전송 실패 시 502 반환"""
+def test_chatwoot_send_failure_triggers_handoff(mock_chatwoot, mock_llm, mock_verify):
+    """Chatwoot 전송 실패 시 200 반환 + 백그라운드에서 핸드오프 시도"""
     mock_chatwoot.get_messages.return_value = []
     mock_chatwoot.send_message.side_effect = Exception("Chatwoot 오류")
+    mock_chatwoot.get_online_agents.return_value = [{"id": 1, "name": "agent"}]
     res = post_webhook(INCOMING_PAYLOAD)
-    assert res.status_code == 502
-    assert res.json()["detail"] == "Chatwoot API error"
+    assert res.status_code == 200
+    # 웹훅은 즉시 200 반환, 실제 오류는 로그에만 남음
