@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 from app.services.handoff_rules import (
     ALL_RULES,
-    COMPLAINT_RULE,
     CONNECTION_RULE,
     SECURITY_RULE,
     apply_actions,
@@ -24,28 +23,6 @@ def test_security_rule_matches_strong_pattern():
 
 def test_security_rule_no_match():
     assert SECURITY_RULE.matches("안녕하세요") is False
-
-
-# ---------------------------------------------------------------------------
-# COMPLAINT_RULE — strong_patterns 즉시 매칭 / ambiguous는 LLM 확인
-# ---------------------------------------------------------------------------
-
-
-def test_complaint_rule_matches_strong_pattern_without_llm_call():
-    with patch("app.services.handoff_rules.confirm_intent") as mock_confirm:
-        assert COMPLAINT_RULE.matches("진짜 화나네요") is True
-        mock_confirm.assert_not_called()
-
-
-def test_complaint_rule_ambiguous_keyword_uses_llm_confirm():
-    with patch("app.services.handoff_rules.confirm_intent", return_value=True) as mock_confirm:
-        assert COMPLAINT_RULE.matches("이거 몇 번째 물어보는 건지 모르겠어요") is True
-        mock_confirm.assert_called_once()
-
-
-def test_complaint_rule_ambiguous_keyword_llm_rejects():
-    with patch("app.services.handoff_rules.confirm_intent", return_value=False):
-        assert COMPLAINT_RULE.matches("이거 제대로 작동하는 방법 알려주세요") is False
 
 
 # ---------------------------------------------------------------------------
@@ -77,9 +54,11 @@ def test_connection_rule_certificate_question_not_connection_intent():
 
 
 def test_evaluate_returns_multiple_matched_rule_names():
+    # "이중 결제"는 SECURITY_RULE의 strong_pattern → LLM 호출 없이 매칭
+    # "상담원 연결"은 CONNECTION_RULE의 strong_pattern → LLM 호출 없이 매칭
     with patch("app.services.handoff_rules.confirm_intent", return_value=False):
-        matched = evaluate("결제 관련해서 너무하시네요")
-    assert set(matched) == {"security", "complaint"}
+        matched = evaluate("이중 결제 문제로 상담원 연결해주세요")
+    assert set(matched) == {"security", "connection"}
 
 
 def test_evaluate_returns_empty_when_nothing_matches():
@@ -108,4 +87,4 @@ def test_apply_actions_noop_for_unmatched_rule_name():
 
 
 def test_all_rules_registered():
-    assert {rule.name for rule in ALL_RULES} == {"security", "complaint", "connection"}
+    assert {rule.name for rule in ALL_RULES} == {"security", "connection"}
