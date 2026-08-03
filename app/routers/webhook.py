@@ -44,6 +44,7 @@ async def generate_and_send_reply(
         logger.warning("대화 이력 조회 실패, 빈 history로 진행: %s", exc)
         history = []
 
+    chatwoot_client.toggle_typing(account_id, conversation_id, status="on")
     try:
         reply = await get_ai_response(
             message=llm_message,
@@ -51,6 +52,7 @@ async def generate_and_send_reply(
             history=history,
         )
     except Exception as exc:
+        chatwoot_client.toggle_typing(account_id, conversation_id, status="off")
         logger.exception("AI 응답 생성 실패: %s", exc)
         raise ReplyError("AI service error") from exc
 
@@ -58,9 +60,11 @@ async def generate_and_send_reply(
         chatwoot_client.send_message(account_id=account_id, conversation_id=conversation_id, content=reply)
         logger.info("응답 전송 완료 | conv=%d reply=%s", conversation_id, reply[:80])
     except Exception as exc:
+        chatwoot_client.toggle_typing(account_id, conversation_id, status="off")
         logger.exception("Chatwoot 메시지 전송 실패: %s", exc)
         raise ReplyError("Chatwoot API error") from exc
 
+    chatwoot_client.toggle_typing(account_id, conversation_id, status="off")
     return reply
 
 
