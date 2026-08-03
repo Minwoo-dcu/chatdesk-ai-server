@@ -12,11 +12,17 @@ webhook.py는 아래 함수만 호출합니다:
 LLM_PROVIDER 환경변수 (groq | gemini)로 선택됨.
 """
 
+import logging
+import time
+
 from groq import Groq
 from google import genai
+from google.api_core.exceptions import ResourceExhausted
 
 from app.config import settings
 from app.services.prompts import SYSTEM_PROMPT
+
+logger = logging.getLogger(__name__)
 
 _groq_client = None
 _gemini_client = None
@@ -73,6 +79,9 @@ def _call_groq(system: str, messages: list[dict], model: str, temperature: float
 
 def _call_gemini(system: str, messages: list[dict], model: str) -> str:
     """Gemini API 호출"""
+    if settings.test_429_force:
+        raise ResourceExhausted("Test 429 RESOURCE_EXHAUSTED (forced for testing)")
+
     client = _get_gemini_client()
     contents = _gemini_convert_messages(messages)
 
@@ -171,15 +180,30 @@ async def get_ai_response(
     history: list[dict],
 ) -> str:
     """
-    사용자 메시지와 대화 이력을 받아 LLM 응답 생성
+    사용자 메시지와 대화 이력을 받아 LLM 응답 생성.
+    429 RESOURCE_EXHAUSTED는 즉시 실패, 503/타임아웃은 최대 2회 재시도.
     """
     messages = build_messages(message, history)
     system = messages[0]["content"]
     user_messages = messages[1:]
 
-    if settings.llm_provider == "gemini":
-        answer = _call_gemini(system, user_messages, model=settings.gemini_model_default)
-    else:
-        answer = _call_groq(system, user_messages, model=settings.groq_model_default, temperature=0)
+    max_retries = 2
+    backoff_delays = (1, 3)
 
-    return answer
+    for attempt in range(max_retries + 1):
+        try:
+            if settings.llm_provider == "gemini":
+                answer = _call_gemini(system, user_messages, model=settings.gemini_model_default)
+            else:
+                answer = _call_groq(system, user_messages, model=settings.groq_model_default, temperature=0)
+            return answer
+        except ResourceExhausted:
+            logger.warning("429 RESOURCE_EXHAUSTED | conv=%d | 재시도 제외", conversation_id)
+            raise
+        except Exception as e:
+            if attempt >= max_retries:
+                logger.warning("LLM 호출 최종 실패 | conv=%d | attempt=%d | error=%s", conversation_id, attempt + 1, type(e).__name__)
+                raise
+            delay = backoff_delays[attempt] if attempt < len(backoff_delays) else backoff_delays[-1]
+            logger.info("LLM 호출 재시도 | conv=%d | attempt=%d/%d | 대기=%ds | error=%s", conversation_id, attempt + 1, max_retries, delay, type(e).__name__)
+            time.sleep(delay)

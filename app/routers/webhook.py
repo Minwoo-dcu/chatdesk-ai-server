@@ -1,7 +1,7 @@
 import logging
 
 from app.config import settings
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 
 from app.models.schemas import ChatwootWebhookPayload
 from app.services import conversation_state
@@ -9,7 +9,7 @@ from app.services.business_hours import is_within_business_hours
 from app.services.chatwoot_client import build_history, chatwoot_client
 from app.services.handoff_rules import apply_actions, assign_or_queue, evaluate
 from app.services.llm_client import get_ai_response, is_repeated_inquiry
-from app.services.prompts import GREETING_MESSAGE, INQUIRY_ITEMS, match_inquiry_value
+from app.services.prompts import GREETING_MESSAGE, INQUIRY_ITEMS, LLM_FAILURE_MESSAGE, match_inquiry_value
 from app.services.rag_handoff import resolve as rag_resolve
 from app.services.verify import verify_webhook_signature
 
@@ -24,6 +24,50 @@ class ReplyError(Exception):
     def __init__(self, detail: str) -> None:
         super().__init__(detail)
         self.detail = detail
+
+
+async def _handle_ai_response_background(
+    account_id: int,
+    conversation_id: int,
+    llm_message: str,
+    inbox_id: int | None,
+    exclude_message_id: int | None = None,
+) -> None:
+    """
+    AI 응답 생성 및 전송을 백그라운드에서 수행.
+    실패 시 고객에게 안내 메시지를 보내고 상담원에게 핸드오프.
+    모든 예외를 흡수하므로 웹훅 밖으로 나가지 않음.
+    """
+    try:
+        await generate_and_send_reply(account_id, conversation_id, llm_message, exclude_message_id)
+    except ReplyError as exc:
+        logger.warning("AI 응답 생성 실패 | conv=%d | error=%s", conversation_id, exc.detail)
+
+        # 이미 핸드오프되었으면 중복 메시지 방지
+        if conversation_state.has_handoff_triggered(conversation_id):
+            logger.info("이미 핸드오프됨, 중복 메시지 생략 | conv=%d", conversation_id)
+            return
+
+        conversation_state.mark_handoff_triggered(conversation_id)
+
+        try:
+            chatwoot_client.send_message(account_id, conversation_id, LLM_FAILURE_MESSAGE)
+            logger.info("AI 실패 안내 메시지 전송 | conv=%d", conversation_id)
+        except Exception as send_exc:
+            logger.exception("안내 메시지 전송 실패 | conv=%d | error=%s", conversation_id, send_exc)
+
+        try:
+            logger.warning("상담원 핸드오프 강제 | conv=%d | reason=llm_failure", conversation_id)
+            apply_actions([], chatwoot_client, account_id, conversation_id)
+            assign_or_queue(
+                chatwoot_client, account_id, conversation_id, inbox_id,
+                connected_message="상담원과 연결되었습니다. 문의하실 내용을 남겨주시면 확인 후 답변드리겠습니다.",
+                no_agent_message="현재 상담 가능한 상담원이 없어 순차적으로 연결해드리겠습니다.",
+            )
+        except Exception as handoff_exc:
+            logger.exception("핸드오프 실행 실패 | conv=%d | error=%s", conversation_id, handoff_exc)
+    except Exception as exc:
+        logger.exception("AI 응답 백그라운드 처리 중 예상치 못한 오류 | conv=%d", conversation_id, exc_info=exc)
 
 
 async def generate_and_send_reply(
@@ -53,7 +97,11 @@ async def generate_and_send_reply(
         )
     except Exception as exc:
         chatwoot_client.toggle_typing(account_id, conversation_id, status="off")
-        logger.exception("AI 응답 생성 실패: %s", exc)
+        # 429는 예상 가능한 오류: 한 줄로. 나머지는 스택트레이스 포함.
+        if "RESOURCE_EXHAUSTED" in type(exc).__name__ or "429" in str(exc):
+            logger.warning("AI 응답 생성 실패(429 쿼터 초과): %s", exc)
+        else:
+            logger.exception("AI 응답 생성 실패: %s", exc)
         raise ReplyError("AI service error") from exc
 
     try:
@@ -76,6 +124,7 @@ async def generate_and_send_reply(
 async def chatwoot_webhook(
     request: Request,
     payload: ChatwootWebhookPayload,
+    background_tasks: BackgroundTasks,
     x_chatwoot_signature: str = Header(default=""),
     x_chatwoot_timestamp: str = Header(default=""),
 ):
@@ -214,15 +263,19 @@ async def chatwoot_webhook(
         )
         return {"status": "ok", "action": action, "rules": matched}
 
-    # ── AI 응답 생성 + 전송 ────────────────────────────────────────────────────
-    # 선택했던 문의유형이 있으면 message에 컨텍스트로 주입 (LLM 시그니처는 불변).
+    # ── AI 응답 생성 + 전송 (백그라운드) ─────────────────────────────────────
+    # 웹훅은 즉시 200을 반환하고, AI 응답 생성/전송/핸드오프는 백그라운드로 처리.
+    # 이렇게 하면 Chatwoot이 재전송하지 않으며, 고객 대기 시간도 줄어듦.
     inquiry_type = conversation_state.get_inquiry_type(conversation_id)
     llm_message = f"[문의유형: {inquiry_type}] {user_content}" if inquiry_type else user_content
-    try:
-        await generate_and_send_reply(account_id, conversation_id, llm_message, exclude_message_id=payload.id)
-    except ReplyError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=exc.detail) from exc
-
+    background_tasks.add_task(
+        _handle_ai_response_background,
+        account_id=account_id,
+        conversation_id=conversation_id,
+        llm_message=llm_message,
+        inbox_id=inbox_id,
+        exclude_message_id=payload.id,
+    )
     return {"status": "ok"}
 
 

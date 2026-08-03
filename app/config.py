@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     gemini_model_rag: str = "gemini-2.0-flash"
     gemini_model_quick: str = "gemini-2.0-flash"
 
+    # Test mode: 429 RESOURCE_EXHAUSTED 강제 발생 (로컬 테스트용)
+    test_429_force: bool = False
+
     class Config:
         env_file = ".env"
 

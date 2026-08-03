@@ -64,3 +64,7 @@ def match_inquiry_value(content: str) -> str | None:
     """
     normalized = (content or "").strip()
     return normalized if normalized in INQUIRY_VALUES else None
+
+
+# AI 응답 생성 실패 시 고객에게 보낼 안내 메시지
+LLM_FAILURE_MESSAGE = "지금은 답변을 드리기 어려워 상담원에게 연결해 드리겠습니다."

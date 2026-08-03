@@ -22,6 +22,9 @@ _turn_count: dict[int, int] = {}
 # A-3(반복 문의): LLM이 "반복"으로 확정 판정한 횟수 — 기준치 넘으면 핸드오프
 _repeat_confirmed_count: dict[int, int] = {}
 
+# AI 응답 생성 실패 시 상담원 핸드오프 트리거 여부 — 중복 메시지 전송 방지용
+_handoff_triggered: set[int] = set()
+
 
 def has_greeted(conversation_id: int) -> bool:
     """해당 대화에 이미 인사를 보냈는지 여부"""
@@ -73,3 +76,13 @@ def increment_repeat_confirmed(conversation_id: int) -> int:
 def reset_repeat_confirmed(conversation_id: int) -> None:
     """반복 확정 카운트 초기화 (핸드오프되거나 새 문의유형 선택 시 호출)"""
     _repeat_confirmed_count[conversation_id] = 0
+
+
+def has_handoff_triggered(conversation_id: int) -> bool:
+    """AI 응답 생성 실패로 인한 핸드오프가 이미 트리거되었는지 여부"""
+    return conversation_id in _handoff_triggered
+
+
+def mark_handoff_triggered(conversation_id: int) -> None:
+    """AI 응답 생성 실패로 인한 핸드오프를 트리거됨으로 표시"""
+    _handoff_triggered.add(conversation_id)
