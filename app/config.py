@@ -9,9 +9,16 @@ class Settings(BaseSettings):
     chatwoot_webhook_secret: str = ""  # 빈 값이면 서명 검증 생략
 
     # LLM Provider
-    llm_provider: str = "groq"  # groq | gemini
+    llm_provider: str = ""  # groq | gemini
     groq_api_key: str = ""
     gemini_api_key: str = ""
+
+    # Model names
+    groq_model_default: str = "llama-3.1-8b-instant"
+    groq_model_rag: str = "llama-3.1-8b-instant"
+    gemini_model_default: str = "gemini-2.0-flash"
+    gemini_model_rag: str = "gemini-2.0-flash"
+    gemini_model_quick: str = "gemini-2.0-flash"
 
     class Config:
         env_file = ".env"

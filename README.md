@@ -7,7 +7,7 @@ Chatwoot Agent Bot 웹훅을 수신해 AI 응답을 자동 전송하는 FastAPI 
 - Python 3.12
 - FastAPI + Uvicorn
 - Pydantic Settings
-- Groq API (LLM)
+- Groq API / Gemini API (LLM, .env로 선택)
 - Chatwoot Agent Bot (webhook)
 
 ## Project Structure
@@ -20,7 +20,7 @@ app/
 │   └── webhook.py             # POST /webhook/chatwoot 엔드포인트, 전체 오케스트레이션
 ├── services/
 │   ├── chatwoot_client.py     # Chatwoot API 호출 (메시지 전송/조회/배정/라벨 등)
-│   ├── llm_client.py          # Groq LLM 연동 (get_ai_response, confirm_intent)
+│   ├── llm_client.py          # Groq/Gemini LLM 연동 (get_ai_response, confirm_intent)
 │   ├── verify.py              # 웹훅 HMAC-SHA256 서명 검증
 │   ├── handoff_rules.py       # 핸드오프 규칙(A-1~A-4): 보안/컴플레인/상담원 연결
 │   ├── rag_handoff.py         # RAG 지식베이스 기반 즉답/핸드오프 판단(A-5)
@@ -61,7 +61,14 @@ cp .env.example .env
 | `CHATWOOT_API_TOKEN`      | ✅   | User 토큰 (Profile Settings > Access Token). 배정·라벨·우선순위 등 관리 API용 |
 | `CHATWOOT_BOT_TOKEN`      | -    | AgentBot access_token (Settings > Bots). 봇 응답을 봇 명의로 전송. 비우면 API_TOKEN 폴백 |
 | `CHATWOOT_WEBHOOK_SECRET` | -    | Agent Bot Webhook Secret (비우면 검증 생략)                         |
-| `GROQ_API_KEY`            | -    | Groq API 키 ([Groq Console](https://console.groq.com/keys))         |
+| `LLM_PROVIDER`            | ✅   | LLM 선택 (`groq` 또는 `gemini`)                                     |
+| `GROQ_API_KEY`            | -    | Groq API 키 ([Groq Console](https://console.groq.com/keys)). LLM_PROVIDER=groq 시 필수 |
+| `GEMINI_API_KEY`          | -    | Gemini API 키 ([Google AI Studio](https://aistudio.google.com/app/apikey)). LLM_PROVIDER=gemini 시 필수 |
+| `GROQ_MODEL_DEFAULT`      | -    | Groq 기본 모델 (기본값: `llama-3.1-8b-instant`)                     |
+| `GROQ_MODEL_RAG`          | -    | Groq RAG 모델 (기본값: `llama-3.1-8b-instant`)                      |
+| `GEMINI_MODEL_DEFAULT`    | -    | Gemini 기본 모델 (기본값: `gemini-2.0-flash`)                       |
+| `GEMINI_MODEL_RAG`        | -    | Gemini RAG 모델 (기본값: `gemini-2.0-flash`)                        |
+| `GEMINI_MODEL_QUICK`      | -    | Gemini 빠른 응답 모델 (기본값: `gemini-2.0-flash`)                  |
 
 ### 웹훅 서명 검증 방식
 
@@ -139,7 +146,7 @@ docker compose up --build
 
 ## LLM Interface
 
-`app/services/llm_client.py`에서 아래 함수 시그니처를 유지하며 Groq API로 구현:
+`app/services/llm_client.py`에서 아래 함수 시그니처를 유지하며 Groq/Gemini API로 구현:
 
 ```python
 async def get_ai_response(
@@ -149,6 +156,12 @@ async def get_ai_response(
 ) -> str:
     ...
 ```
+
+`.env`의 `LLM_PROVIDER`로 LLM 선택:
+- `groq` — Groq API (Llama 모델)
+- `gemini` — Google Gemini API (google-genai 라이브러리)
+
+각 LLM별 모델명도 `.env`에서 설정 가능하여, 코드 수정 없이 모델 변경 가능.
 
 ## 참고 문서
 

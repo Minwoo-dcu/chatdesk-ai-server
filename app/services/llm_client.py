@@ -29,20 +29,19 @@ def _get_groq_client() -> Groq:
     return _groq_client
 
 
-def _get_gemini_client():
+def _get_gemini_client() -> genai.Client:
     global _gemini_client
     if _gemini_client is None:
         _gemini_client = genai.Client(api_key=settings.gemini_api_key)
     return _gemini_client
 
 
-def _gemini_convert_messages(system: str, messages: list[dict]) -> tuple[str, list]:
+def _gemini_convert_messages(messages: list[dict]) -> list:
     """
-    OpenAI 형식 → Gemini 형식 변환
+    OpenAI 형식 → google-genai 형식 변환
 
-    - system: 별도 system_instruction으로 분리
     - role "assistant" → "model" 변환
-    - 반환: (system_instruction, contents 배열)
+    - system은 별도로 처리되므로 제외
     """
     contents = []
     for msg in messages:
@@ -50,9 +49,11 @@ def _gemini_convert_messages(system: str, messages: list[dict]) -> tuple[str, li
         if role == "system":
             continue
         role_mapped = "model" if role == "assistant" else "user"
-        contents.append({"role": role_mapped, "parts": [{"text": msg["content"]}]})
-
-    return system, contents
+        contents.append({
+            "role": role_mapped,
+            "parts": [{"text": msg["content"]}]
+        })
+    return contents
 
 
 def _call_groq(system: str, messages: list[dict], model: str, temperature: float = 0) -> str:
@@ -70,16 +71,16 @@ def _call_groq(system: str, messages: list[dict], model: str, temperature: float
     return response.choices[0].message.content.strip()
 
 
-def _call_gemini(system: str, messages: list[dict], model: str, thinking_level: str = "minimal") -> str:
-    """Gemini API 호출 (temperature deprecated → thinking_level 사용)"""
+def _call_gemini(system: str, messages: list[dict], model: str) -> str:
+    """Gemini API 호출"""
     client = _get_gemini_client()
-    _, contents = _gemini_convert_messages(system, messages)
+    contents = _gemini_convert_messages(messages)
 
+    config = genai.types.GenerateContentConfig(systemInstruction=system)
     response = client.models.generate_content(
         model=model,
         contents=contents,
-        system_instruction=system,
-        config={"thinking": {"type": thinking_level}} if thinking_level != "off" else None,
+        config=config,
     )
     return response.text.strip()
 
@@ -107,9 +108,9 @@ def confirm_intent(message: str, prompt: str) -> bool:
     messages = [{"role": "user", "content": message}]
 
     if settings.llm_provider == "gemini":
-        answer = _call_gemini(prompt, messages, model="gemini-3.5-flash-lite", thinking_level="minimal")
+        answer = _call_gemini(prompt, messages, model=settings.gemini_model_quick)
     else:
-        answer = _call_groq(prompt, messages, model="llama-3.1-8b-instant", temperature=0)
+        answer = _call_groq(prompt, messages, model=settings.groq_model_default, temperature=0)
 
     return "YES" in answer.upper()
 
@@ -131,9 +132,9 @@ def is_repeated_inquiry(message: str, history: list[dict]) -> bool:
     messages = [{"role": "user", "content": user_content}]
 
     if settings.llm_provider == "gemini":
-        answer = _call_gemini(prompt, messages, model="gemini-3.5-flash-lite", thinking_level="minimal")
+        answer = _call_gemini(prompt, messages, model=settings.gemini_model_quick)
     else:
-        answer = _call_groq(prompt, messages, model="llama-3.1-8b-instant", temperature=0)
+        answer = _call_groq(prompt, messages, model=settings.groq_model_default, temperature=0)
 
     return "YES" in answer.upper()
 
@@ -157,9 +158,9 @@ def generate_rag_answer(question: str, data: dict) -> str:
     messages = [{"role": "user", "content": user_content}]
 
     if settings.llm_provider == "gemini":
-        answer = _call_gemini(prompt, messages, model="gemini-3.6-flash", thinking_level="medium")
+        answer = _call_gemini(prompt, messages, model=settings.gemini_model_rag)
     else:
-        answer = _call_groq(prompt, messages, model="llama-3.1-8b-instant", temperature=0.3)
+        answer = _call_groq(prompt, messages, model=settings.groq_model_rag, temperature=0.3)
 
     return answer
 
@@ -177,8 +178,8 @@ async def get_ai_response(
     user_messages = messages[1:]
 
     if settings.llm_provider == "gemini":
-        answer = _call_gemini(system, user_messages, model="gemini-3.6-flash", thinking_level="off")
+        answer = _call_gemini(system, user_messages, model=settings.gemini_model_default)
     else:
-        answer = _call_groq(system, user_messages, model="llama-3.1-8b-instant", temperature=0)
+        answer = _call_groq(system, user_messages, model=settings.groq_model_default, temperature=0)
 
     return answer
