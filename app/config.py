@@ -8,7 +8,10 @@ class Settings(BaseSettings):
     chatwoot_bot_token: str = ""  # AgentBot access_token — 봇 응답 전송용(봇 명의로 기록). 비우면 api_token으로 폴백
     chatwoot_webhook_secret: str = ""  # 빈 값이면 서명 검증 생략
 
+    # LLM Provider
+    llm_provider: str = "groq"  # groq | gemini
     groq_api_key: str = ""
+    gemini_api_key: str = ""
 
     class Config:
         env_file = ".env"

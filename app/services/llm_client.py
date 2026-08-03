@@ -1,5 +1,5 @@
 """
-llm_client.py — AI 응답 생성 모듈
+llm_client.py — AI 응답 생성 모듈 (Groq/Gemini 지원)
 
 webhook.py는 아래 함수만 호출합니다:
 
@@ -9,30 +9,84 @@ webhook.py는 아래 함수만 호출합니다:
         history: list[dict],
     ) -> str:
 
-Groq API 기반 LLM 응답 생성
+LLM_PROVIDER 환경변수 (groq | gemini)로 선택됨.
 """
 
 from groq import Groq
+from google import genai
 
 from app.config import settings
 from app.services.prompts import SYSTEM_PROMPT
 
-_client = None
+_groq_client = None
+_gemini_client = None
 
 
-def get_client():
+def _get_groq_client() -> Groq:
+    global _groq_client
+    if _groq_client is None:
+        _groq_client = Groq(api_key=settings.groq_api_key)
+    return _groq_client
+
+
+def _get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=settings.gemini_api_key)
+    return _gemini_client
+
+
+def _gemini_convert_messages(system: str, messages: list[dict]) -> tuple[str, list]:
     """
-    Groq Client 생성 (최초 호출 시 1회만 생성, 이후 재사용)
+    OpenAI 형식 → Gemini 형식 변환
+
+    - system: 별도 system_instruction으로 분리
+    - role "assistant" → "model" 변환
+    - 반환: (system_instruction, contents 배열)
     """
-    global _client
-    if _client is None:
-        _client = Groq(api_key=settings.groq_api_key)
-    return _client
+    contents = []
+    for msg in messages:
+        role = msg["role"]
+        if role == "system":
+            continue
+        role_mapped = "model" if role == "assistant" else "user"
+        contents.append({"role": role_mapped, "parts": [{"text": msg["content"]}]})
+
+    return system, contents
+
+
+def _call_groq(system: str, messages: list[dict], model: str, temperature: float = 0) -> str:
+    """Groq API 호출"""
+    client = _get_groq_client()
+    full_messages = [
+        {"role": "system", "content": system},
+        *messages,
+    ]
+    response = client.chat.completions.create(
+        model=model,
+        messages=full_messages,
+        temperature=temperature,
+    )
+    return response.choices[0].message.content.strip()
+
+
+def _call_gemini(system: str, messages: list[dict], model: str, thinking_level: str = "minimal") -> str:
+    """Gemini API 호출 (temperature deprecated → thinking_level 사용)"""
+    client = _get_gemini_client()
+    _, contents = _gemini_convert_messages(system, messages)
+
+    response = client.models.generate_content(
+        model=model,
+        contents=contents,
+        system_instruction=system,
+        config={"thinking": {"type": thinking_level}} if thinking_level != "off" else None,
+    )
+    return response.text.strip()
 
 
 def build_messages(message: str, history: list[dict]) -> list[dict]:
     """
-    system 프롬프트 + 대화 이력 + 현재 메시지를 Groq messages 배열로 조립합니다.
+    system 프롬프트 + 대화 이력 + 현재 메시지를 messages 배열로 조립합니다.
 
     Args:
         message: 방금 수신한 사용자 메시지
@@ -50,16 +104,13 @@ def confirm_intent(message: str, prompt: str) -> bool:
     애매한 경우에만 호출: 주어진 판단 기준(prompt)에 따라
     LLM한테 실제 의도가 맞는지 YES/NO로 확인받음
     """
-    client = get_client()
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": message},
-        ],
-        temperature=0,
-    )
-    answer = response.choices[0].message.content.strip()
+    messages = [{"role": "user", "content": message}]
+
+    if settings.llm_provider == "gemini":
+        answer = _call_gemini(prompt, messages, model="gemini-3.5-flash-lite", thinking_level="minimal")
+    else:
+        answer = _call_groq(prompt, messages, model="llama-3.1-8b-instant", temperature=0)
+
     return "YES" in answer.upper()
 
 
@@ -67,9 +118,8 @@ def is_repeated_inquiry(message: str, history: list[dict]) -> bool:
     """
     A-3(반복 문의) 판단: 직전 대화 이력을 보고, 이번 메시지가 아직 해결되지 않은
     질문을 다른 표현으로 반복하는 것인지 확인한다. 자연스러운 새 질문·화제 전환은 반복이 아님.
-    판단 작업이므로 temperature=0으로 일관성을 유지한다.
+    판단 작업이므로 일관성을 유지한다.
     """
-    client = get_client()
     history_text = "\n".join(f"{h['role']}: {h['content']}" for h in history[-6:])
     prompt = (
         "아래는 고객과 AI 상담봇의 최근 대화 이력이야. "
@@ -77,24 +127,22 @@ def is_repeated_inquiry(message: str, history: list[dict]) -> bool:
         "다른 표현으로 반복하는 것인지 판단해. 자연스러운 새 질문이나 화제 전환이면 반복이 아니야. "
         "반복이면 'YES', 아니면 'NO'라고만 답해."
     )
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": f"대화 이력:\n{history_text}\n\n판단 대상 메시지: {message}"},
-        ],
-        temperature=0,
-    )
-    answer = response.choices[0].message.content.strip()
+    user_content = f"대화 이력:\n{history_text}\n\n판단 대상 메시지: {message}"
+    messages = [{"role": "user", "content": user_content}]
+
+    if settings.llm_provider == "gemini":
+        answer = _call_gemini(prompt, messages, model="gemini-3.5-flash-lite", thinking_level="minimal")
+    else:
+        answer = _call_groq(prompt, messages, model="llama-3.1-8b-instant", temperature=0)
+
     return "YES" in answer.upper()
+
 
 def generate_rag_answer(question: str, data: dict) -> str:
     """
     A-5(RAG) 응답 생성: 지식베이스에서 찾은 값 데이터(data)를 근거로
     질문에 자연스러운 문장으로 답변을 생성한다. data에 없는 내용은 지어내지 않는다.
     """
-    client = get_client()
-
     def fmt(v):
         return ", ".join(v) if isinstance(v, list) else str(v)
 
@@ -105,16 +153,15 @@ def generate_rag_answer(question: str, data: dict) -> str:
         "참고 정보에 없는 내용은 절대 지어내지 말고, 참고 정보 범위 내에서만 답해. "
         "친절하고 간결하게 1~3문장으로 답변해."
     )
+    user_content = f"참고 정보:\n{data_text}\n\n고객 질문: {question}"
+    messages = [{"role": "user", "content": user_content}]
 
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": f"참고 정보:\n{data_text}\n\n고객 질문: {question}"},
-        ],
-        temperature=0.3,
-    )
-    return response.choices[0].message.content.strip()
+    if settings.llm_provider == "gemini":
+        answer = _call_gemini(prompt, messages, model="gemini-3.6-flash", thinking_level="medium")
+    else:
+        answer = _call_groq(prompt, messages, model="llama-3.1-8b-instant", temperature=0.3)
+
+    return answer
 
 
 async def get_ai_response(
@@ -125,12 +172,13 @@ async def get_ai_response(
     """
     사용자 메시지와 대화 이력을 받아 LLM 응답 생성
     """
+    messages = build_messages(message, history)
+    system = messages[0]["content"]
+    user_messages = messages[1:]
 
-    client = get_client()
+    if settings.llm_provider == "gemini":
+        answer = _call_gemini(system, user_messages, model="gemini-3.6-flash", thinking_level="off")
+    else:
+        answer = _call_groq(system, user_messages, model="llama-3.1-8b-instant", temperature=0)
 
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=build_messages(message, history),
-    )
-
-    return response.choices[0].message.content
+    return answer

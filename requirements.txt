@@ -4,6 +4,7 @@ python-dotenv
 pydantic-settings
 requests
 groq
+google-genai
 httpx
 pytest
 pytest-asyncio
