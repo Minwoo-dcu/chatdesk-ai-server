@@ -7,6 +7,7 @@ Chatdesk AI Server — 웹훅 엔드포인트 테스트
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import requests
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -338,3 +339,41 @@ def test_chatwoot_send_failure_triggers_handoff(mock_chatwoot, mock_llm, mock_ve
     res = post_webhook(INCOMING_PAYLOAD)
     assert res.status_code == 200
     # 웹훅은 즉시 200 반환, 실제 오류는 로그에만 남음
+
+
+@patch("app.routers.webhook.verify_webhook_signature", return_value=True)
+@patch("app.routers.webhook.chatwoot_client")
+def test_400_bad_request_error_logging(mock_chatwoot, mock_verify, caplog):
+    """400 Bad Request 에러가 구분되게 로깅되는지 확인"""
+    mock_chatwoot.get_messages.return_value = []
+    mock_chatwoot.get_online_agents.return_value = [{"id": 1, "name": "agent"}]
+
+    # 400 에러 시뮬레이션
+    http_error = requests.exceptions.HTTPError("400 Client Error")
+    http_error.response = MagicMock()
+    http_error.response.status_code = 400
+
+    with patch("app.routers.webhook.get_ai_response", new_callable=AsyncMock, side_effect=http_error):
+        res = post_webhook(INCOMING_PAYLOAD)
+        assert res.status_code == 200
+        # 로그에 400이 명시되어야 함
+        assert "400 Bad Request" in caplog.text
+
+
+@patch("app.routers.webhook.verify_webhook_signature", return_value=True)
+@patch("app.routers.webhook.chatwoot_client")
+def test_429_rate_limit_error_logging(mock_chatwoot, mock_verify, caplog):
+    """429 Rate Limit 에러가 구분되게 로깅되는지 확인"""
+    mock_chatwoot.get_messages.return_value = []
+    mock_chatwoot.get_online_agents.return_value = [{"id": 1, "name": "agent"}]
+
+    # 429 에러 시뮬레이션
+    http_error = requests.exceptions.HTTPError("429 Too Many Requests")
+    http_error.response = MagicMock()
+    http_error.response.status_code = 429
+
+    with patch("app.routers.webhook.get_ai_response", new_callable=AsyncMock, side_effect=http_error):
+        res = post_webhook(INCOMING_PAYLOAD)
+        assert res.status_code == 200
+        # 로그에 429가 명시되어야 함
+        assert "429 Rate Limit" in caplog.text
