@@ -12,7 +12,7 @@ def is_within_business_hours(inbox_data: dict) -> bool:
 
     timezone = inbox_data.get("timezone", "UTC")
     now = datetime.now(ZoneInfo(timezone))
-    weekday = now.weekday()
+    weekday = (now.weekday() + 1) % 7  # Python 요일 → Chatwoot 요일 변환
 
     for day in inbox_data.get("working_hours", []):
         if day.get("day_of_week") != weekday:
