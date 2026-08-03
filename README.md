@@ -66,9 +66,9 @@ cp .env.example .env
 | `GEMINI_API_KEY`          | -    | Gemini API 키 ([Google AI Studio](https://aistudio.google.com/app/apikey)). LLM_PROVIDER=gemini 시 필수 |
 | `GROQ_MODEL_DEFAULT`      | -    | Groq 기본 모델 (기본값: `llama-3.1-8b-instant`)                     |
 | `GROQ_MODEL_RAG`          | -    | Groq RAG 모델 (기본값: `llama-3.1-8b-instant`)                      |
-| `GEMINI_MODEL_DEFAULT`    | -    | Gemini 기본 모델 (기본값: `gemini-2.0-flash`)                       |
-| `GEMINI_MODEL_RAG`        | -    | Gemini RAG 모델 (기본값: `gemini-2.0-flash`)                        |
-| `GEMINI_MODEL_QUICK`      | -    | Gemini 빠른 응답 모델 (기본값: `gemini-2.0-flash`)                  |
+| `GEMINI_MODEL_DEFAULT`    | -    | Gemini 기본 모델 (기본값: `gemini-3.5-flash`)                       |
+| `GEMINI_MODEL_RAG`        | -    | Gemini RAG 모델 (기본값: `gemini-3.5-flash`)                        |
+| `GEMINI_MODEL_QUICK`      | -    | Gemini 빠른 응답 모델 (기본값: `gemini-3.5-flash`)                  |
 
 ### 웹훅 서명 검증 방식
 
