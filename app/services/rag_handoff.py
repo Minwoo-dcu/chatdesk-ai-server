@@ -10,6 +10,7 @@ docs/poc의 RAG PoC 문서에 정의된 흐름을 구현:
 """
 from app.services.knowledge_base import search
 from app.services.business_hours import format_business_hours
+from app.services.llm_client import generate_rag_answer 
 
 CONFIDENCE_THRESHOLD = 0.7
 
@@ -27,6 +28,7 @@ def resolve(question: str, inbox_data: dict | None = None) -> dict:
         return {"action": "answer", "content": format_business_hours(inbox_data)}
 
     if result["confidence"] >= CONFIDENCE_THRESHOLD:
-        return {"action": "answer", "content": result["answer"]}
+        answer = generate_rag_answer(question, result["data"])   # 변경: result["answer"] → LLM 생성
+        return {"action": "answer", "content": answer}
 
     return {"action": "handoff", "reason": "RAG_LOW_CONFIDENCE"}

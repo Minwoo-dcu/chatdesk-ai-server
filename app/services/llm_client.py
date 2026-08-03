@@ -88,6 +88,34 @@ def is_repeated_inquiry(message: str, history: list[dict]) -> bool:
     answer = response.choices[0].message.content.strip()
     return "YES" in answer.upper()
 
+def generate_rag_answer(question: str, data: dict) -> str:
+    """
+    A-5(RAG) 응답 생성: 지식베이스에서 찾은 값 데이터(data)를 근거로
+    질문에 자연스러운 문장으로 답변을 생성한다. data에 없는 내용은 지어내지 않는다.
+    """
+    client = get_client()
+
+    def fmt(v):
+        return ", ".join(v) if isinstance(v, list) else str(v)
+
+    data_text = "\n".join(f"- {k}: {fmt(v)}" for k, v in data.items())
+
+    prompt = (
+        "너는 상담 챗봇이야. 아래 '참고 정보'만 근거로 고객 질문에 자연스러운 한국어 문장으로 답변해. "
+        "참고 정보에 없는 내용은 절대 지어내지 말고, 참고 정보 범위 내에서만 답해. "
+        "친절하고 간결하게 1~3문장으로 답변해."
+    )
+
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": f"참고 정보:\n{data_text}\n\n고객 질문: {question}"},
+        ],
+        temperature=0.3,
+    )
+    return response.choices[0].message.content.strip()
+
 
 async def get_ai_response(
     message: str,
