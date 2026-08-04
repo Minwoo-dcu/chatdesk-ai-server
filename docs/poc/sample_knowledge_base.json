@@ -70,7 +70,7 @@
     "confidence": 0.9
   },
   "account_security_info": {
-    "keywords": ["비밀번호", "개인정보"],
+    "keywords": ["비밀번호", "개인정보","비번"],
     "data": {
       "비밀번호재설정": "로그인 화면 하단 '비밀번호 찾기'에서 이메일 인증 후 재설정 가능",
       "개인정보처리방침": "https://example.com/privacy"
