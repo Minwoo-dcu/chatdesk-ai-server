@@ -15,6 +15,7 @@ LLM_PROVIDER 환경변수 (groq | gemini)로 선택됨.
 import logging
 import time
 
+import groq
 from groq import Groq
 from google import genai
 
