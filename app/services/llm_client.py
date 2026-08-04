@@ -17,7 +17,6 @@ import time
 
 from groq import Groq
 from google import genai
-from google.api_core.exceptions import ResourceExhausted
 
 from app.config import settings
 from app.services.prompts import SYSTEM_PROMPT
@@ -80,7 +79,7 @@ def _call_groq(system: str, messages: list[dict], model: str, temperature: float
 def _call_gemini(system: str, messages: list[dict], model: str) -> str:
     """Gemini API 호출"""
     if settings.test_429_force:
-        raise ResourceExhausted("Test 429 RESOURCE_EXHAUSTED (forced for testing)")
+        raise genai.errors.ClientError(code=429, response_json={})
 
     client = _get_gemini_client()
     contents = _gemini_convert_messages(messages)
@@ -181,7 +180,7 @@ async def get_ai_response(
 ) -> str:
     """
     사용자 메시지와 대화 이력을 받아 LLM 응답 생성.
-    429 RESOURCE_EXHAUSTED는 즉시 실패, 503/타임아웃은 최대 2회 재시도.
+    429 Rate Limit은 즉시 실패, 503/타임아웃은 최대 2회 재시도.
     """
     messages = build_messages(message, history)
     system = messages[0]["content"]
@@ -197,10 +196,18 @@ async def get_ai_response(
             else:
                 answer = _call_groq(system, user_messages, model=settings.groq_model_default, temperature=0)
             return answer
-        except ResourceExhausted:
-            logger.warning("429 RESOURCE_EXHAUSTED | conv=%d | 재시도 제외", conversation_id)
-            raise
         except Exception as e:
+            # 429 Rate Limit은 즉시 실패
+            is_rate_limit = (
+                isinstance(e, groq.RateLimitError) or
+                (isinstance(e, genai.errors.ClientError) and e.code == 429)
+            )
+
+            if is_rate_limit:
+                logger.warning("429 Rate Limit | conv=%d | 재시도 제외", conversation_id)
+                raise
+
+            # 다른 예외는 재시도
             if attempt >= max_retries:
                 logger.warning("LLM 호출 최종 실패 | conv=%d | attempt=%d | error=%s", conversation_id, attempt + 1, type(e).__name__)
                 raise

@@ -7,7 +7,8 @@ Chatdesk AI Server — 웹훅 엔드포인트 테스트
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import requests
+import groq
+from google import genai
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -348,12 +349,10 @@ def test_400_bad_request_error_logging(mock_chatwoot, mock_verify, caplog):
     mock_chatwoot.get_messages.return_value = []
     mock_chatwoot.get_online_agents.return_value = [{"id": 1, "name": "agent"}]
 
-    # 400 에러 시뮬레이션
-    http_error = requests.exceptions.HTTPError("400 Client Error")
-    http_error.response = MagicMock()
-    http_error.response.status_code = 400
+    # 400 에러 시뮬레이션 (google-genai)
+    error = genai.errors.ClientError(code=400, response_json={"error": "bad request"})
 
-    with patch("app.routers.webhook.get_ai_response", new_callable=AsyncMock, side_effect=http_error):
+    with patch("app.routers.webhook.get_ai_response", new_callable=AsyncMock, side_effect=error):
         res = post_webhook(INCOMING_PAYLOAD)
         assert res.status_code == 200
         # 로그에 400이 명시되어야 함
@@ -367,12 +366,12 @@ def test_429_rate_limit_error_logging(mock_chatwoot, mock_verify, caplog):
     mock_chatwoot.get_messages.return_value = []
     mock_chatwoot.get_online_agents.return_value = [{"id": 1, "name": "agent"}]
 
-    # 429 에러 시뮬레이션
-    http_error = requests.exceptions.HTTPError("429 Too Many Requests")
-    http_error.response = MagicMock()
-    http_error.response.status_code = 429
+    # 429 에러 시뮬레이션 (groq)
+    response = MagicMock()
+    response.status_code = 429
+    error = groq.RateLimitError("rate limit exceeded", response=response, body=None)
 
-    with patch("app.routers.webhook.get_ai_response", new_callable=AsyncMock, side_effect=http_error):
+    with patch("app.routers.webhook.get_ai_response", new_callable=AsyncMock, side_effect=error):
         res = post_webhook(INCOMING_PAYLOAD)
         assert res.status_code == 200
         # 로그에 429가 명시되어야 함
