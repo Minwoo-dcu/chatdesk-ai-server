@@ -16,9 +16,9 @@ class Settings(BaseSettings):
     # Model names
     groq_model_default: str = "llama-3.1-8b-instant"
     groq_model_rag: str = "llama-3.1-8b-instant"
-    gemini_model_default: str = "gemini-2.0-flash"
-    gemini_model_rag: str = "gemini-2.0-flash"
-    gemini_model_quick: str = "gemini-2.0-flash"
+    gemini_model_default: str = "gemini-3.5-flash"
+    gemini_model_rag: str = "gemini-3.5-flash"
+    gemini_model_quick: str = "gemini-3.5-flash"
 
     # Test mode: 429 RESOURCE_EXHAUSTED 강제 발생 (로컬 테스트용)
     test_429_force: bool = False

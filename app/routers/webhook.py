@@ -1,6 +1,7 @@
 import logging
 
-import requests
+import groq
+from google import genai
 from app.config import settings
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 
@@ -96,9 +97,13 @@ async def generate_and_send_reply(
             conversation_id=conversation_id,
             history=history,
         )
-    except requests.exceptions.HTTPError as exc:
+    except groq.RateLimitError as exc:
         chatwoot_client.toggle_typing(account_id, conversation_id, status="off")
-        status_code = exc.response.status_code if exc.response is not None else None
+        logger.warning("AI 응답 생성 실패(429 Rate Limit): %s", exc)
+        raise ReplyError("AI service error") from exc
+    except genai.errors.ClientError as exc:
+        chatwoot_client.toggle_typing(account_id, conversation_id, status="off")
+        status_code = exc.code
         if status_code == 400:
             logger.warning("AI 응답 생성 실패(400 Bad Request): %s", exc)
         elif status_code == 429:
@@ -108,11 +113,7 @@ async def generate_and_send_reply(
         raise ReplyError("AI service error") from exc
     except Exception as exc:
         chatwoot_client.toggle_typing(account_id, conversation_id, status="off")
-        # 429는 예상 가능한 오류: 한 줄로. 나머지는 스택트레이스 포함.
-        if "RESOURCE_EXHAUSTED" in type(exc).__name__ or "429" in str(exc):
-            logger.warning("AI 응답 생성 실패(429 쿼터 초과): %s", exc)
-        else:
-            logger.exception("AI 응답 생성 실패: %s", exc)
+        logger.exception("AI 응답 생성 실패: %s", exc)
         raise ReplyError("AI service error") from exc
 
     try:
