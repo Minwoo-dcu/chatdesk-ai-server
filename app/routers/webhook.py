@@ -227,7 +227,7 @@ async def chatwoot_webhook(
     # 즉답은 핸드오프가 아니라 그 자리에서 바로 끝나는 별개 경로.
     # 핸드오프로 판정되면 matched에 "rag"를 얹어 아래 실행 블록에 합류시킨다.
     if not matched and not inquiry_selection:
-        rag_result = rag_resolve(user_content)
+        rag_result = rag_resolve(user_content, inbox_data)
 
         if rag_result["action"] == "answer":
             chatwoot_client.send_message(account_id, conversation_id, rag_result["content"])
